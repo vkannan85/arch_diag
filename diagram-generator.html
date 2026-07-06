@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Azure → Draw.io Diagram Generator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      background: #11111b;
+      padding: 10px 20px;
+      border-bottom: 1px solid #313244;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .logo {
+      width: 30px; height: 30px;
+      background: #0078D4;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 700; font-size: 13px;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 16px; font-weight: 600; color: #cdd6f4; }
+    header .subtitle {
+      font-size: 11px; color: #6c7086; margin-left: auto;
+      white-space: nowrap;
+    }
+
+    /* ── Main Layout ── */
+    .main { flex: 1; display: flex; overflow: hidden; }
+
+    .panel { display: flex; flex-direction: column; overflow: hidden; }
+    .left-panel  { width: 45%; border-right: 1px solid #313244; }
+    .right-panel { flex: 1; }
+
+    /* ── Panel Headers ── */
+    .panel-header {
+      padding: 8px 14px;
+      background: #181825;
+      border-bottom: 1px solid #313244;
+      display: flex; align-items: center; gap: 8px;
+      flex-shrink: 0;
+    }
+    .panel-title {
+      font-size: 11px; font-weight: 600; color: #a6adc8;
+      text-transform: uppercase; letter-spacing: 0.6px;
+    }
+    .badge {
+      padding: 1px 7px; border-radius: 10px;
+      background: #313244; color: #a6adc8; font-size: 11px;
+    }
+
+    /* ── Left panel content ── */
+    .left-inner { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    textarea {
+      flex: 1;
+      background: #1e1e2e; color: #cdd6f4;
+      border: none; outline: none; resize: none;
+      padding: 14px 16px;
+      font-family: 'Consolas', 'Cascadia Code', 'Courier New', monospace;
+      font-size: 12.5px; line-height: 1.65;
+      tab-size: 2;
+    }
+    textarea::placeholder { color: #45475a; }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      padding: 10px 14px;
+      background: #181825;
+      border-top: 1px solid #313244;
+      display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+      flex-shrink: 0;
+    }
+    .sep { width: 1px; height: 20px; background: #313244; margin: 0 2px; }
+    .label-sm { font-size: 11px; color: #6c7086; }
+
+    button {
+      padding: 6px 14px;
+      border: none; border-radius: 5px;
+      font-size: 12px; font-family: inherit; cursor: pointer;
+      transition: background 0.12s, opacity 0.12s;
+    }
+    .btn-primary   { background: #0078D4; color: #fff; font-weight: 600; }
+    .btn-primary:hover { background: #106ebe; }
+    .btn-secondary { background: #313244; color: #cdd6f4; }
+    .btn-secondary:hover { background: #45475a; }
+    .btn-success   { background: #40a02b; color: #fff; font-weight: 600; }
+    .btn-success:hover { background: #37a023; }
+    .btn-success:disabled { background: #313244; color: #585b70; cursor: not-allowed; }
+    .btn-outline   { background: transparent; color: #cdd6f4; border: 1px solid #45475a; }
+    .btn-outline:hover { background: #313244; }
+    .btn-outline:disabled { color: #45475a; border-color: #313244; cursor: not-allowed; }
+
+    /* ── Right panel content ── */
+    .right-inner  { flex: 1; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+
+    .status-bar {
+      padding: 10px 14px; border-radius: 7px;
+      font-size: 12.5px; line-height: 1.5;
+    }
+    .status-idle    { background: #1a1a2e; border: 1px solid #313244; color: #a6adc8; }
+    .status-success { background: #1e3a2a; border: 1px solid #2d6e3d; color: #a6e3a1; }
+    .status-error   { background: #3a1e1e; border: 1px solid #7a2a2a; color: #f38ba8; }
+    .status-info    { background: #1e2a3a; border: 1px solid #2a4a7a; color: #89b4fa; }
+
+    /* ── Component summary card ── */
+    .summary-card {
+      background: #181825; border: 1px solid #313244;
+      border-radius: 7px; padding: 10px 12px;
+      font-size: 12px; display: none;
+    }
+    .summary-card h4 { color: #89b4fa; margin-bottom: 7px; font-size: 12px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 4px; }
+    .summary-item {
+      background: #1e1e2e; border-radius: 4px;
+      padding: 4px 8px; color: #a6adc8; font-size: 11px;
+    }
+    .summary-item .type { color: #6c7086; font-size: 10px; }
+
+    /* ── XML Preview ── */
+    .xml-wrap {
+      flex: 1; min-height: 200px;
+      background: #11111b; border: 1px solid #313244;
+      border-radius: 7px; overflow: auto;
+    }
+    .xml-wrap pre {
+      padding: 14px; font-family: 'Consolas', 'Cascadia Code', monospace;
+      font-size: 11.5px; color: #a6adc8; white-space: pre-wrap;
+      word-break: break-all; line-height: 1.5;
+    }
+
+    /* ── Action buttons row ── */
+    .action-row {
+      display: flex; gap: 8px; align-items: center;
+      padding: 8px 14px;
+      background: #181825; border-top: 1px solid #313244;
+      flex-shrink: 0;
+    }
+    .action-hint { font-size: 11px; color: #6c7086; margin-left: auto; }
+
+    /* Setup guide card */
+    .setup-guide {
+      background: #1a2a1a; border: 1px solid #2d5e3a;
+      border-radius: 7px; padding: 12px 14px; font-size: 12px; line-height: 1.6;
+    }
+    .setup-guide h4 { color: #a6e3a1; margin-bottom: 8px; font-size: 12px; font-weight: 700; }
+    .setup-guide .sg-method {
+      background: #11111b; border-radius: 5px;
+      padding: 8px 12px; margin-bottom: 8px; border-left: 3px solid #313244;
+    }
+    .setup-guide .sg-method.rec  { border-left-color: #40a02b; }
+    .setup-guide .sg-method.alt  { border-left-color: #0078D4; }
+    .setup-guide .sg-label { font-weight: 700; margin-bottom: 4px; font-size: 11.5px; }
+    .setup-guide .sg-label.rec  { color: #a6e3a1; }
+    .setup-guide .sg-label.alt  { color: #89b4fa; }
+    .setup-guide ol { margin: 0; padding-left: 16px; color: #a6adc8; }
+    .setup-guide li { margin-bottom: 2px; }
+    .setup-guide code { background: #313244; border-radius: 3px; padding: 1px 5px; font-size: 11px; color: #cba6f7; }
+    .setup-guide .sg-note { color: #6c7086; font-size: 11px; margin-top: 6px; border-top: 1px solid #313244; padding-top: 6px; }
+    .btn-open-big { background: #0078D4 !important; color: #fff !important; font-weight: 700 !important; padding: 8px 20px !important; font-size: 13px !important; }
+    .btn-open-big:hover { background: #106ebe !important; }
+    .btn-open-big:disabled { background: #313244 !important; color: #585b70 !important; cursor: not-allowed !important; }
+
+    /* Keyboard hint pill */
+    kbd {
+      display: inline-block; padding: 1px 5px;
+      background: #313244; border: 1px solid #45475a;
+      border-radius: 3px; font-size: 10px; color: #a6adc8;
+      font-family: monospace;
+    }
+
+    /* ── Setup guide card ── */
+    .setup-guide {
+      background: #1a2a1a; border: 1px solid #2d6e3d;
+      border-radius: 7px; padding: 12px 14px;
+      font-size: 12px; line-height: 1.6;
+    }
+    .setup-guide h4 { color: #a6e3a1; margin-bottom: 8px; font-size: 13px; }
+    .setup-guide .method {
+      background: #111; border-radius: 5px;
+      padding: 8px 12px; margin-bottom: 8px;
+    }
+    .setup-guide .method-label {
+      font-weight: 600; font-size: 12px; margin-bottom: 4px;
+    }
+    .setup-guide .method-label.rec { color: #a6e3a1; }
+    .setup-guide .method-label.alt { color: #89b4fa; }
+    .setup-guide ol { margin: 0; padding-left: 18px; color: #a6adc8; }
+    .setup-guide li { margin-bottom: 3px; }
+    .setup-guide code {
+      background: #313244; border-radius: 3px;
+      padding: 1px 5px; font-size: 11px; color: #cba6f7;
+    }
+    .setup-guide .note { color: #6c7086; font-size: 11px; margin-top: 6px; }
+    .btn-highlight { background: #0078D4 !important; color: #fff !important; font-weight: 700 !important; font-size: 13px !important; padding: 8px 18px !important; box-shadow: 0 0 0 2px #89b4fa44; }
+    .btn-highlight:hover { background: #006cbf !important; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Az</div>
+  <h1>Azure Architecture → Draw.io Generator</h1>
+  <span class="subtitle">Paste requirements · Generate · Download or open in draw.io</span>
+</header>
+
+<div class="main">
+
+  <!-- ══ LEFT PANEL ══ -->
+  <div class="panel left-panel">
+    <div class="panel-header">
+      <span class="panel-title">Requirements</span>
+      <span class="badge" id="lineCount">0 lines</span>
+    </div>
+
+    <div class="left-inner">
+      <textarea id="requirements"
+        placeholder="Describe your Azure architecture using indented lines or plain prose.
+
+Examples of accepted formats:
+
+Hub VNet (10.0.0.0/16)
+  Firewall Subnet
+    Azure Firewall
+  Gateway Subnet
+    VPN Gateway
+
+Spoke1 VNet (10.1.0.0/16)
+  Web Subnet (10.1.1.0/24)
+    External Load Balancer
+    2x IIS VM
+  App Subnet
+    App Service
+    Function App
+
+Spoke2 VNet (10.2.0.0/16)
+  Data Subnet
+    SQL Server
+    Key Vault
+    Storage Account
+
+─────────────────────────────────
+Press Ctrl+Enter to generate.
+Load an example below to get started."></textarea>
+
+      <div class="toolbar">
+        <button class="btn-primary" onclick="generateDiagram()">⚡ Generate</button>
+        <button class="btn-secondary" onclick="clearAll()">✕ Clear</button>
+        <div class="sep"></div>
+        <span class="label-sm">Examples:</span>
+        <button class="btn-outline" onclick="loadExample('hubspoke')">Hub-Spoke</button>
+        <button class="btn-outline" onclick="loadExample('3tier')">3-Tier App</button>
+        <button class="btn-outline" onclick="loadExample('microservices')">Microservices</button>
+        <button class="btn-outline" onclick="loadExample('landing')">Landing Zone</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ RIGHT PANEL ══ -->
+  <div class="panel right-panel">
+    <div class="panel-header">
+      <span class="panel-title">Generated Draw.io XML</span>
+    </div>
+
+    <div class="right-inner">
+      <!-- Setup guide — always visible -->
+      <div class="setup-guide">
+        <h4>🖼️ Getting Azure icons in draw.io</h4>
+        <div class="sg-method rec">
+          <div class="sg-label rec">✅ Icons are now embedded as real PNG URLs — no library setup needed</div>
+          <ol>
+            <li>Generate your diagram → Click <strong>⚡ Open in draw.io</strong> or <strong>⬇ Download .drawio</strong></li>
+            <li>For <strong>Open in draw.io</strong>: click <strong>Extras → Edit Diagram</strong>, paste XML → <strong>OK</strong></li>
+            <li>Icons load automatically from GitHub CDN (internet required) ✓</li>
+          </ol>
+        </div>
+        <div class="sg-method alt">
+          <div class="sg-label alt">🔧 If icons still don't appear (offline / corporate proxy)</div>
+          <ol>
+            <li>Download the .drawio file</li>
+            <li>Open draw.io → <strong>View → Shapes → Azure 2</strong> → enable</li>
+            <li>Re-import the file — icons render from the local stencil library ✓</li>
+          </ol>
+        </div>
+        <div class="sg-note">ℹ️ This page is <strong>100% browser-based</strong> — no Python, no requirements.txt, no installation needed.</div>
+      </div>
+      <div class="status-bar status-idle" id="statusBar">
+        Enter your Azure architecture on the left, then click <strong>⚡ Generate</strong> or press <kbd>Ctrl+Enter</kbd>.
+      </div>
+
+      <div class="summary-card" id="summaryCard">
+        <h4>Detected Components</h4>
+        <div class="summary-grid" id="summaryGrid"></div>
+      </div>
+
+      <div class="xml-wrap">
+        <pre id="xmlOutput">&lt;!-- Generated draw.io XML will appear here --&gt;</pre>
+      </div>
+    </div>
+
+    <div class="action-row">
+      <button class="btn-open-big btn-outline" id="btnOpen" onclick="openInDrawio()" disabled>⚡ Open in draw.io (Azure icons pre-loaded) ↗</button>
+      <button class="btn-success" id="btnDownload" onclick="downloadDrawio()" disabled>⬇ Download .drawio</button>
+      <button class="btn-outline" id="btnCopy" onclick="copyXML()" disabled>Copy XML</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+// ══════════════════════════════════════════════════════════════════
+// RESOURCE DEFINITIONS  (order matters — more specific first)
+// Icons: verified PNG URLs from mingrammer/diagrams GitHub CDN
+// ══════════════════════════════════════════════════════════════════
+const _IC = 'https://raw.githubusercontent.com/mingrammer/diagrams/master/resources/azure/';
+const RESOURCE_TYPES = [
+  { type: 'frontdoor',   kw: ['front door','frontdoor','azure front door','afd '],                 icon: 'network/front-doors.png',                   label: 'Front Door'        },
+  { type: 'appgateway',  kw: ['application gateway','app gateway',' agw ','waf gateway','waf v2'], icon: 'network/application-gateway.png',           label: 'App Gateway'       },
+  { type: 'firewall',    kw: ['azure firewall','azfw','network virtual appliance','firewall'],     icon: 'network/firewall.png',                      label: 'Azure Firewall'    },
+  { type: 'bastion',     kw: ['bastion','azure bastion'],                                          icon: 'network/public-ip-addresses.png',           label: 'Azure Bastion'     },
+  { type: 'vpngateway',  kw: ['vpn gateway','expressroute','express route',' vpn gw','er circuit','virtual network gateway'], icon: 'network/virtual-network-gateways.png', label: 'VPN Gateway' },
+  { type: 'loadbalancer',kw: ['load balancer','loadbalancer','internal lb','external lb',' alb ',' ilb ',' lb '], icon: 'network/load-balancers.png', label: 'Load Balancer'     },
+  { type: 'apim',        kw: ['api management','apim','api gateway'],                              icon: 'integration/api-management.png',            label: 'API Management'    },
+  { type: 'aks',         kw: [' aks ',' aks\n','kubernetes',' k8s '],                              icon: 'compute/kubernetes-services.png',           label: 'AKS'               },
+  { type: 'functionapp', kw: ['function app','azure function',' functions ','serverless function'],icon: 'compute/function-apps.png',                 label: 'Function App'      },
+  { type: 'appservice',  kw: ['app service','web app','webapp','web application'],                 icon: 'compute/app-services.png',                  label: 'App Service'       },
+  { type: 'vmss',        kw: ['scale set','vmss','virtual machine scale'],                         icon: 'compute/vm-scale-sets.png',                 label: 'VM Scale Set'      },
+  { type: 'vm',          kw: ['virtual machine',' vm ','iis vm','iis server','iis','windows server','linux server','jumpbox','jump box'], icon: 'compute/virtual-machine.png', label: 'VM' },
+  { type: 'sql',         kw: ['sql server','sql database','azure sql','mssql',' sql '],            icon: 'database/sql-databases.png',                label: 'SQL Server'        },
+  { type: 'cosmosdb',    kw: ['cosmos db','cosmosdb','cosmos','mongodb azure'],                    icon: 'database/cosmos-db.png',                    label: 'Cosmos DB'         },
+  { type: 'mysql',       kw: ['mysql','mariadb'],                                                  icon: 'database/sql-databases.png',                label: 'MySQL'             },
+  { type: 'postgres',    kw: ['postgresql','postgres',' pg '],                                     icon: 'database/sql-databases.png',                label: 'PostgreSQL'        },
+  { type: 'redis',       kw: ['redis cache','azure cache for redis','redis'],                      icon: 'database/cosmos-db.png',                    label: 'Redis Cache'       },
+  { type: 'storage',     kw: ['storage account','blob storage','adls','data lake',' storage '],    icon: 'storage/storage-accounts.png',              label: 'Storage Account'   },
+  { type: 'keyvault',    kw: ['key vault','keyvault',' kv '],                                      icon: 'security/key-vaults.png',                   label: 'Key Vault'         },
+  { type: 'servicebus',  kw: ['service bus','servicebus'],                                         icon: 'integration/service-bus.png',               label: 'Service Bus'       },
+  { type: 'eventhub',    kw: ['event hub','eventhub','event stream'],                              icon: 'integration/service-bus.png',               label: 'Event Hub'         },
+  { type: 'nsg',         kw: ['network security group',' nsg '],                                   icon: 'network/firewall.png',                      label: 'NSG'               },
+  { type: 'publicip',    kw: ['public ip',' pip '],                                                icon: 'network/public-ip-addresses.png',           label: 'Public IP'         },
+  { type: 'loganalytics',kw: ['log analytics','log workspace',' law '],                            icon: 'analytics/log-analytics-workspaces.png',    label: 'Log Analytics'     },
+  { type: 'appinsights', kw: ['application insights','app insights',' appi '],                     icon: 'devops/application-insights.png',           label: 'App Insights'      },
+  { type: 'monitor',     kw: ['azure monitor',' monitor '],                                        icon: 'monitor/monitor.png',                       label: 'Azure Monitor'     },
+  { type: 'ddos',        kw: ['ddos protection','ddos'],                                           icon: 'network/ddos-protection-plans.png',         label: 'DDoS Protection'   },
+  { type: 'container',   kw: ['container instance','aci '],                                        icon: 'compute/container-instances.png',           label: 'Container Instance'},
+];
+
+// ══════════════════════════════════════════════════════════════════
+// EXAMPLE REQUIREMENTS
+// ══════════════════════════════════════════════════════════════════
+const EXAMPLES = {
+  hubspoke: `# Hub-Spoke Network Topology
+
+Hub VNet (10.0.0.0/16)
+  AzureFirewallSubnet (10.0.1.0/24)
+    Azure Firewall
+  GatewaySubnet (10.0.2.0/24)
+    VPN Gateway
+  ManagementSubnet (10.0.3.0/24)
+    Azure Bastion
+    VM (Jump Box)
+
+Spoke1 VNet (10.1.0.0/16)
+  WebSubnet (10.1.1.0/24)
+    External Load Balancer
+    2x IIS VM
+  AppSubnet (10.1.2.0/24)
+    App Service
+    Function App
+
+Spoke2 VNet (10.2.0.0/16)
+  DataSubnet (10.2.1.0/24)
+    SQL Server
+    Cosmos DB
+  SecuritySubnet (10.2.2.0/24)
+    Key Vault
+    Storage Account`,
+
+  '3tier': `# 3-Tier Web Application
+
+Production VNet (10.10.0.0/16)
+  IngressSubnet (10.10.1.0/24)
+    Application Gateway (WAF)
+    Public IP
+  WebSubnet (10.10.2.0/24)
+    Internal Load Balancer
+    3x IIS VM
+    NSG
+  AppSubnet (10.10.3.0/24)
+    2x App Service
+    Redis Cache
+  DataSubnet (10.10.4.0/24)
+    SQL Server
+    Storage Account
+    Key Vault
+  MonitoringSubnet (10.10.5.0/24)
+    Log Analytics
+    App Insights`,
+
+  microservices: `# Microservices Platform
+
+Platform VNet (10.20.0.0/16)
+  IngressSubnet (10.20.1.0/24)
+    Azure Front Door
+    API Management
+    Application Gateway
+  ServiceSubnet (10.20.2.0/24)
+    AKS
+    Service Bus
+    Event Hub
+  DataSubnet (10.20.3.0/24)
+    Cosmos DB
+    Redis Cache
+    PostgreSQL
+  ObservabilitySubnet (10.20.4.0/24)
+    Log Analytics
+    App Insights
+    Azure Monitor`,
+
+  landing: `# Azure Landing Zone
+
+Connectivity VNet (Hub) (10.0.0.0/16)
+  AzureFirewallSubnet (10.0.1.0/24)
+    Azure Firewall
+    DDoS Protection
+  GatewaySubnet (10.0.2.0/24)
+    VPN Gateway
+  ManagementSubnet (10.0.3.0/24)
+    Azure Bastion
+
+Corp Identity VNet (Spoke) (10.1.0.0/16)
+  ADSubnet (10.1.1.0/24)
+    2x VM (Domain Controller)
+
+Corp App VNet (Spoke) (10.2.0.0/16)
+  WebSubnet (10.2.1.0/24)
+    Application Gateway
+    2x App Service
+  DataSubnet (10.2.2.0/24)
+    SQL Server
+    Key Vault
+    Storage Account`,
+};
+
+// ══════════════════════════════════════════════════════════════════
+// ID GENERATOR
+// ══════════════════════════════════════════════════════════════════
+let _idSeq = 2;
+const nextId = () => 'c' + (_idSeq++);
+const resetIds = () => { _idSeq = 2; };
+
+// ══════════════════════════════════════════════════════════════════
+// PARSER
+// ══════════════════════════════════════════════════════════════════
+function getIndent(line) {
+  const m = line.match(/^(\s*)/);
+  return m ? m[1].length : 0;
+}
+
+function extractCIDR(text) {
+  const m = text.match(/\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2})\b/);
+  return m ? m[1] : '';
+}
+
+function extractCount(lower) {
+  let m = lower.match(/\b(\d+)\s*[x×]\s/i);
+  if (m) return Math.min(parseInt(m[1]), 8);
+  m = lower.match(/^(\d+)\s+(vm|virtual machine|iis|server)\b/);
+  if (m) return Math.min(parseInt(m[1]), 8);
+  const words = { two: 2, three: 3, four: 4, five: 5, six: 6 };
+  m = lower.match(/\b(two|three|four|five|six)\b/i);
+  if (m && lower.includes('vm')) return words[m[1].toLowerCase()];
+  return 1;
+}
+
+function detectResourceType(lower) {
+  const padded = ' ' + lower + ' ';
+  for (const rt of RESOURCE_TYPES) {
+    if (rt.kw.some(k => padded.includes(k))) return rt;
+  }
+  return null;
+}
+
+function cleanName(text) {
+  let s = text
+    .replace(/^[-*•·◦▸▹→]\s*/, '')         // Remove bullets
+    .replace(/^\d+\.\s*/, '')               // Remove "1. " numbering
+    .replace(/\*\*/g, '').replace(/\*/g, '') // Remove **bold**
+    .trim();
+
+  // "snet-frontend" (10.x)  →  snet-frontend
+  const qStart = s.match(/^"([^"]+)"/);
+  if (qStart) return qStart[1];
+
+  // VNet: "vnet-name"  or  Azure Firewall: "azfw"  →  extract quoted name
+  const qColon = s.match(/:\s*"([^"]+)"/);
+  if (qColon) return qColon[1];
+
+  // Remove leading count "2x "
+  s = s.replace(/^\d+\s*[x×]\s*/i, '');
+  // Remove CIDR
+  s = s.replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}\b/g, '');
+  // Remove empty parens
+  s = s.replace(/\(\s*\)/g, '');
+  return s.trim();
+}
+
+// ── VNet / Subnet line guards ──────────────────────────────────────────────
+// A line defines a VNet only when "vnet" is the PRIMARY subject of the line
+// (e.g. "Hub VNet", "Spoke1 VNet (10.x)") — NOT just mentioned in prose
+// (e.g. "place everything inside a VNet", "one VNet, three subnets").
+function isVNetLine(stripped, lower) {
+  if (!lower.includes('vnet') && !lower.includes('virtual network')) return false;
+  // Reject if a quantifier/article precedes "vnet" → it's prose
+  if (/\b(one|a|the|single|each|any|this|that|per|our|your|my|every|inside|into|within)\s+(vnet|virtual network)\b/.test(lower)) return false;
+  // Reject if followed by non-possessive words → still prose
+  if (/\bvnet\s+(box|boundary|boundaries|level|layer|topology|design|concept|diagram)\b/.test(lower)) return false;
+  // Reject long sentences (>9 words = descriptive prose, not a name)
+  if (stripped.trim().split(/\s+/).length > 9) return false;
+  return true;
+}
+
+// A line defines a Subnet only when "subnet" is the PRIMARY subject
+// Also accepts "snet-name" (10.x.x.x/xx) — quoted name + CIDR = subnet definition.
+function isSubnetLine(stripped, lower) {
+  // Accept: quoted-name + CIDR pattern  e.g.  "snet-frontend" (10.10.1.0/24)
+  if (/^"[^"]+"[\s]*\(/.test(stripped.trim()) && extractCIDR(stripped)) return true;
+  if (!lower.includes('subnet') && !lower.includes('sub-net')) return false;
+  // Reject "Subnets:" section header (single word + optional colon = just a heading)
+  if (/^subnets?\s*:\s*$/.test(lower.trim())) return false;
+  // Reject plural / article-led prose mentions
+  if (/\b(each|every|the|a|one|two|three|four|five|per|for|into|across|all)\s+subnet/.test(lower)) return false;
+  if (/subnet\s+(boundary|boundaries|box|level|design|topology|config|nsg)\b/.test(lower)) return false;
+  // Reject long sentences
+  if (stripped.trim().split(/\s+/).length > 8) return false;
+  return true;
+}
+
+function parseRequirements(text) {
+  resetIds();
+  const root = { type: 'root', children: [], id: 'root' };
+  const lines = text.split('\n');
+
+  // Stack: [{node, indent}]
+  const stack = [{ node: root, indent: -1 }];
+  // Track whether we've passed into a non-diagram section (Connections, Layout, etc.)
+  let stopParsing = false;
+
+  for (const rawLine of lines) {
+    const raw = rawLine.trimEnd();
+    const trimmed = raw.trim();
+
+    // Skip blank and comment lines
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    // Stop parsing resource content when we hit section headers that are not resource definitions
+    if (/^(connections?|layout\s+rules?|output\s+format|notes?)\s*:/i.test(trimmed)) {
+      stopParsing = true; continue;
+    }
+    if (stopParsing) continue;
+
+    const stripped = trimmed.replace(/^[-*•·◦▸▹→]\s*/, '').trim();
+    const lower = stripped.toLowerCase();
+    const indent = getIndent(raw);
+    const cidr = extractCIDR(stripped);
+    const name = cleanName(stripped);
+
+    // ── Classify line ──
+    let nodeType = null;
+    let rt = null;
+
+    if (isVNetLine(stripped, lower)) {
+      nodeType = 'vnet';
+    } else if (isSubnetLine(stripped, lower)) {
+      nodeType = 'subnet';
+    } else {
+      rt = detectResourceType(lower);
+      if (rt) nodeType = 'resource';
+    }
+
+    if (!nodeType) continue;
+
+    const count = extractCount(lower);
+    const isHub   = lower.includes('hub') || lower.includes('conn') || lower.includes('central');
+    const isSpoke = lower.includes('spoke') || lower.includes('workload') || lower.includes('corp') || lower.includes('app');
+
+    const node = {
+      type:    nodeType,
+      rawType: rt ? rt.type : nodeType,
+      name:    name || (rt ? rt.label : nodeType),
+      cidr,
+      isHub:   nodeType === 'vnet' && isHub,
+      isSpoke: nodeType === 'vnet' && !isHub,
+      icon:    rt ? rt.icon : null,
+      label:   rt ? rt.label : null,
+      children: [],
+      id: nextId(),
+    };
+
+    // ── Find parent via stack ──
+    // KEY: Do NOT pop a VNet node unless the incoming line is also a VNet.
+    // This keeps resources at the same indent as the VNet still inside it
+    // (handles docs like instructions.md where VNet + resources share indent).
+    while (stack.length > 1 && stack[stack.length - 1].indent >= indent) {
+      if (stack[stack.length - 1].node.type === 'vnet' && nodeType !== 'vnet') break;
+      stack.pop();
+    }
+    const parent = stack[stack.length - 1].node;
+
+    // ── Auto-wrap orphaned resources ──
+    if (nodeType === 'resource') {
+      let targetSubnet = null;
+      if (parent.type === 'subnet') {
+        targetSubnet = parent;
+      } else if (parent.type === 'vnet') {
+        targetSubnet = parent.children.find(c => c.type === 'subnet' && c._auto);
+        if (!targetSubnet) {
+          targetSubnet = { type: 'subnet', rawType: 'subnet', name: 'Resources', cidr: '', isHub: false, isSpoke: false, children: [], id: nextId(), _auto: true };
+          parent.children.push(targetSubnet);
+        }
+      } else {
+        // No VNet — create a default VNet + subnet
+        let defVNet = root.children.find(c => c.type === 'vnet' && c._auto);
+        if (!defVNet) {
+          defVNet = { type: 'vnet', rawType: 'vnet', name: 'Azure Resources', cidr: '', isHub: false, isSpoke: false, children: [], id: nextId(), _auto: true };
+          root.children.push(defVNet);
+        }
+        targetSubnet = defVNet.children.find(c => c._auto);
+        if (!targetSubnet) {
+          targetSubnet = { type: 'subnet', rawType: 'subnet', name: 'Resources', cidr: '', isHub: false, isSpoke: false, children: [], id: nextId(), _auto: true };
+          defVNet.children.push(targetSubnet);
+        }
+      }
+      // Expand count
+      for (let i = 0; i < count; i++) {
+        targetSubnet.children.push({
+          ...node,
+          name: count > 1 ? `${node.name} ${i + 1}` : node.name,
+          id: nextId(),
+        });
+      }
+      continue;
+    }
+
+    // ── VNet / Subnet nodes ──
+    if (count > 1 && nodeType === 'resource') {
+      // handled above
+    } else {
+      parent.children.push(node);
+      stack.push({ node, indent });
+    }
+  }
+
+  // Fallback: if nothing detected, try prose parse
+  const vnets = root.children.filter(c => c.type === 'vnet');
+  if (vnets.length === 0) {
+    return parseProse(text);
+  }
+
+  // Parse connection arrows from the text and attach to root
+  root._connections = parseConnections(text);
+
+  return root;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CONNECTION PARSER — handles Users/Internet, aggregate sources, labels
+// ══════════════════════════════════════════════════════════════════
+function parseConnections(text) {
+  const conns = [];
+  const lines = text.split('\n');
+  let inConns = false;
+
+  for (const line of lines) {
+    const tl = line.trim();
+    if (/^connections?\s*:/i.test(tl))  { inConns = true;  continue; }
+    if (inConns && /^(layout|output|resources?|notes?)\s*:/i.test(tl)) { inConns = false; }
+    if (!inConns || !tl) continue;
+
+    const arrow = tl.replace(/^[-*•]\s*/, '');
+    if (!arrow.includes('→') && !arrow.includes('->')) continue;
+    const parts = arrow.split(/\s*(?:→|->)\s*/);
+
+    for (let i = 0; i < parts.length - 1; i++) {
+      const from = parts[i].trim();
+      let to = parts[i + 1].trim()
+        .replace(/\s*\((?![\d.]{5})[^)]*\)/g, '')  // remove "(note)" but not CIDRs
+        .replace(/\s+(and|,)\s+.*/i, '')             // take first of "A and B"
+        .trim();
+
+      const lblM = to.match(/^\[([^\]]+)\]\s*/);
+      const label = lblM ? lblM[1] : '';
+      if (lblM) to = to.replace(lblM[0], '').trim();
+
+      if (!to) continue;
+
+      if (/^(users?|internet|external users?|clients?)\s*$/i.test(from)) {
+        conns.push({ from: '__INTERNET__', to, label: label || 'HTTPS', style: 'bold' });
+      } else if (/^all\s+(apps?|services?|applications?|workloads?)\s*/i.test(from)) {
+        conns.push({ from: '__ALL_APPS__', to, label, style: 'dashed' });
+      } else if (/^all\s+(resources?|infra)\s*/i.test(from)) {
+        conns.push({ from: '__ALL_RES__', to, label, style: 'dotted' });
+      } else if (/^all\s+(outbound|traffic|egress)\s*/i.test(from)) {
+        conns.push({ from: '__ALL_APPS__', to, label: label || 'Outbound', style: 'dashed' });
+      } else if (from) {
+        conns.push({ from, to, label, style: '' });
+      }
+    }
+  }
+  return conns;
+}
+
+// Match a connection endpoint string — returns ARRAY of matching nodes
+function findNodesForConn(text, allNodes) {
+  const norm = s => s.toLowerCase().replace(/-/g, ' ').replace(/\s+/g, ' ').trim();
+  const tNorm = norm(text);
+  const tPad  = ' ' + tNorm + ' ';
+
+  for (const rt of RESOURCE_TYPES) {
+    if (rt.kw.some(k => tPad.includes(k))) {
+      const byName = allNodes.filter(n => n.rawType === rt.type &&
+        (norm(n.name).includes(tNorm) || tNorm.includes(norm(n.name))));
+      if (byName.length) return byName;
+      const any = allNodes.filter(n => n.rawType === rt.type);
+      if (any.length) return any;
+    }
+  }
+  return allNodes.filter(n => {
+    const nNorm = norm(n.name);
+    return nNorm.includes(tNorm) || tNorm.includes(nNorm);
+  });
+}
+
+// Single-node convenience wrapper
+function findNodeForConn(text, allNodes) {
+  return findNodesForConn(text, allNodes)[0] || null;
+}
+
+function parseProse(text) {
+  resetIds();
+  const root = { type: 'root', children: [], id: 'root' };
+  const defVNet = { type: 'vnet', rawType: 'vnet', name: 'Azure VNet', cidr: '', isHub: false, isSpoke: false, children: [], id: nextId() };
+  const defSubnet = { type: 'subnet', rawType: 'subnet', name: 'Resources', cidr: '', isHub: false, isSpoke: false, children: [], id: nextId() };
+  defVNet.children.push(defSubnet);
+  root.children.push(defVNet);
+
+  const lower = ' ' + text.toLowerCase() + ' ';
+  for (const rt of RESOURCE_TYPES) {
+    if (rt.kw.some(k => lower.includes(k))) {
+      defSubnet.children.push({
+        type: 'resource', rawType: rt.type,
+        name: rt.label, icon: rt.icon, label: rt.label,
+        cidr: '', isHub: false, isSpoke: false, children: [], id: nextId(),
+      });
+    }
+  }
+  return root;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// LAYOUT ENGINE
+// ══════════════════════════════════════════════════════════════════
+const L = {
+  RES_W: 60, RES_H: 60,
+  RES_LABEL_H: 22,
+  COL_W: 100,   // resource column width (wider = labels don't bleed into neighbours)
+  ROW_H: 105,   // resource row height (icon 60 + label ~25 + padding)
+  PER_ROW: 4,
+
+  SN_HEADER: 26,
+  SN_PAD_H: 14,   // left/right padding inside subnet
+  SN_PAD_V: 12,   // top/bottom padding inside subnet
+  SN_GAP: 10,     // gap between subnets inside a VNet
+
+  VN_HEADER: 36,
+  VN_PAD_H: 18,
+  VN_PAD_V: 14,
+  VN_GAP: 60,     // gap between VNets on canvas
+
+  INTERNET_W: 70, INTERNET_H: 70,
+  START_X: 80, START_Y: 180,
+};
+
+function subnetSize(subnet) {
+  const n = Math.max(subnet.children.length, 1);
+  const cols = Math.min(n, L.PER_ROW);
+  const rows = Math.ceil(n / L.PER_ROW);
+  const w = cols * L.COL_W + L.SN_PAD_H * 2;
+  const h = L.SN_HEADER + L.SN_PAD_V + rows * L.ROW_H + L.SN_PAD_V;
+  return { w: Math.max(w, 170), h: Math.max(h, 90) };
+}
+
+function vnetSize(vnet) {
+  if (!vnet.children.length) return { w: 230, h: 120 };
+  const sizes = vnet.children.map(subnetSize);
+  const maxW = Math.max(...sizes.map(s => s.w));
+  const totalH = sizes.reduce((sum, s) => sum + s.h + L.SN_GAP, 0);
+  return {
+    w: Math.max(maxW + L.VN_PAD_H * 2, 230),
+    h: Math.max(L.VN_HEADER + L.VN_PAD_V + totalH + L.VN_PAD_V, 130),
+  };
+}
+
+function layoutTree(root) {
+  const vnets = root.children.filter(c => c.type === 'vnet');
+  const hubs   = vnets.filter(v => v.isHub);
+  const spokes = vnets.filter(v => !v.isHub);
+  const hubSpoke = hubs.length > 0 && spokes.length > 0;
+
+  // ── Position VNets ──
+  if (hubSpoke) {
+    // Hub on left, spokes stacked to the right
+    const hubSz = vnetSize(hubs[0]);
+    let hubCY = L.START_Y + hubSz.h / 2;
+
+    // Total height of all spokes
+    const spokeSizes = spokes.map(vnetSize);
+    const totalSpokeH = spokeSizes.reduce((s, sz) => s + sz.h + L.VN_GAP, -L.VN_GAP);
+    const spokeStartY = L.START_Y + hubSz.h / 2 - totalSpokeH / 2;
+
+    hubs[0]._x = L.START_X;
+    hubs[0]._y = L.START_Y;
+    hubs[0]._w = hubSz.w;
+    hubs[0]._h = hubSz.h;
+
+    let sy = spokeStartY;
+    for (let i = 0; i < spokes.length; i++) {
+      const sz = spokeSizes[i];
+      spokes[i]._x = L.START_X + hubSz.w + L.VN_GAP;
+      spokes[i]._y = sy;
+      spokes[i]._w = sz.w;
+      spokes[i]._h = sz.h;
+      sy += sz.h + L.VN_GAP;
+    }
+  } else {
+    // Grid layout: 3 per row
+    let x = L.START_X, y = L.START_Y, col = 0, rowMaxH = 0;
+    for (const vnet of vnets) {
+      const sz = vnetSize(vnet);
+      vnet._x = x; vnet._y = y; vnet._w = sz.w; vnet._h = sz.h;
+      rowMaxH = Math.max(rowMaxH, sz.h);
+      x += sz.w + L.VN_GAP;
+      col++;
+      if (col >= 3) {
+        col = 0; x = L.START_X; y += rowMaxH + L.VN_GAP; rowMaxH = 0;
+      }
+    }
+  }
+
+  // ── Position subnets and resources within VNets ──
+  for (const vnet of vnets) {
+    let subY = L.VN_HEADER + L.VN_PAD_V;
+    for (const subnet of vnet.children) {
+      const sz = subnetSize(subnet);
+      subnet._x = L.VN_PAD_H;
+      subnet._y = subY;
+      subnet._w = sz.w;
+      subnet._h = sz.h;
+
+      let col = 0, row = 0;
+      for (const res of subnet.children) {
+        res._x = L.SN_PAD_H + col * L.COL_W + (L.COL_W - L.RES_W) / 2;
+        res._y = L.SN_HEADER + L.SN_PAD_V + row * L.ROW_H;
+        res._w = L.RES_W;
+        res._h = L.RES_H;
+        col++;
+        if (col >= L.PER_ROW) { col = 0; row++; }
+      }
+      subY += sz.h + L.SN_GAP;
+    }
+  }
+
+  return root;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// DRAW.IO XML GENERATOR
+// ══════════════════════════════════════════════════════════════════
+const esc = s => String(s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+const STYLE = {
+  HUB:    'swimlane;startSize=36;fillColor=#d5e8d4;strokeColor=#4d9b4d;rounded=1;arcSize=2;fontStyle=1;fontSize=12;fontColor=#1a3a1a;swimlaneLine=1;',
+  VNET:   'swimlane;startSize=36;fillColor=#dae8fc;strokeColor=#4d9bda;rounded=1;arcSize=2;fontStyle=1;fontSize=12;fontColor=#1a2a4a;swimlaneLine=1;',
+  SUBNET: 'swimlane;startSize=24;fillColor=#f8f8ff;strokeColor=#9090cc;rounded=1;arcSize=3;fontSize=10;fontColor=#333366;swimlaneLine=1;',
+  INET:   `image;image=${_IC}network/public-ip-addresses.png;html=1;sketch=0;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;align=center;`,
+  EDGE_PEER: 'edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;strokeColor=#4d9bda;strokeWidth=1.5;',
+  EDGE_INET: 'edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#0078D4;strokeWidth=2;',
+};
+
+function resStyle(iconPath) {
+  return `image;image=${_IC}${iconPath};html=1;sketch=0;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;align=center;`;
+}
+
+function generateXML(root) {
+  const cells = [
+    '<mxCell id="0" />',
+    '<mxCell id="1" parent="0" />',
+  ];
+
+  const vnets  = root.children.filter(c => c.type === 'vnet');
+  const hubs   = vnets.filter(v => v.isHub);
+  const spokes = vnets.filter(v => !v.isHub);
+  const hubSpoke = hubs.length > 0;
+
+  // ── Internet node ──
+  let internetId = null;
+  if (hubSpoke) {
+    internetId = nextId();
+    const hub = hubs[0];
+    const ix = (hub._x || 80) + (hub._w || 250) / 2 - L.INTERNET_W / 2;
+    const iy = 60;
+    cells.push(`<mxCell id="${internetId}" value="Internet" style="${esc(STYLE.INET)}" vertex="1" parent="1"><mxGeometry x="${Math.round(ix)}" y="${iy}" width="${L.INTERNET_W}" height="${L.INTERNET_H}" as="geometry" /></mxCell>`);
+  }
+
+  // ── VNets ──
+  for (const vnet of vnets) {
+    const style = vnet.isHub ? STYLE.HUB : STYLE.VNET;
+    const label = vnet.cidr ? `${esc(vnet.name)}&#xa;${vnet.cidr}` : esc(vnet.name);
+    cells.push(`<mxCell id="${vnet.id}" value="${label}" style="${esc(style)}" vertex="1" parent="1"><mxGeometry x="${Math.round(vnet._x||80)}" y="${Math.round(vnet._y||180)}" width="${Math.round(vnet._w||250)}" height="${Math.round(vnet._h||200)}" as="geometry" /></mxCell>`);
+
+    // ── Subnets ──
+    for (const sn of vnet.children) {
+      const snLabel = sn.cidr ? `${esc(sn.name)}&#xa;${sn.cidr}` : esc(sn.name);
+      cells.push(`<mxCell id="${sn.id}" value="${snLabel}" style="${esc(STYLE.SUBNET)}" vertex="1" parent="${vnet.id}"><mxGeometry x="${Math.round(sn._x||18)}" y="${Math.round(sn._y||40)}" width="${Math.round(sn._w||180)}" height="${Math.round(sn._h||100)}" as="geometry" /></mxCell>`);
+
+      // ── Resources ──
+      for (const res of sn.children) {
+        const icon = res.icon || 'compute/virtual-machine.png';
+        cells.push(`<mxCell id="${res.id}" value="${esc(res.name)}" style="${esc(resStyle(icon))}" vertex="1" parent="${sn.id}"><mxGeometry x="${Math.round(res._x||15)}" y="${Math.round(res._y||28)}" width="${L.RES_W}" height="${L.RES_H}" as="geometry" /></mxCell>`);
+      }
+    }
+  }
+
+  // ── Internet → Hub edge ──
+  if (internetId && hubs.length > 0) {
+    const eid = nextId();
+    cells.push(`<mxCell id="${eid}" value="" style="${esc(STYLE.EDGE_INET)}" edge="1" source="${internetId}" target="${hubs[0].id}" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>`);
+  }
+
+  // ── Hub → Spoke peering edges ──
+  if (hubs.length > 0) {
+    for (const spoke of spokes) {
+      const eid = nextId();
+      cells.push(`<mxCell id="${eid}" value="VNet Peering" style="${esc(STYLE.EDGE_PEER)}" edge="1" source="${hubs[0].id}" target="${spoke.id}" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>`);
+    }
+  }
+
+  // ── Parsed connection arrows ──
+  if (root._connections && root._connections.length > 0) {
+    // Collect all resource nodes (flat list for matching)
+    const allResNodes = [];
+    (function collect(node) {
+      if (node.type === 'resource') allResNodes.push(node);
+      (node.children || []).forEach(collect);
+    })(root);
+
+    // "All apps" = appservice + functionapp nodes
+    const appNodes  = allResNodes.filter(n => n.rawType === 'appservice' || n.rawType === 'functionapp');
+    // "All resources" = everything
+    const allNodes  = allResNodes;
+
+    const edgeStyle = (style) => {
+      const base = 'edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=1.5;';
+      if (style === 'dashed') return base + 'dashed=1;strokeColor=#888;';
+      if (style === 'dotted') return base + 'dashed=1;strokeColor=#4a4;';
+      if (style === 'bold')   return base + 'strokeColor=#0078D4;strokeWidth=2;';
+      return base + 'strokeColor=#555;';
+    };
+
+    // Internet node (added at top-centre if any __INTERNET__ connections exist)
+    let internetCellId = null;
+    const needsInternet = root._connections.some(c => c.from === '__INTERNET__');
+    if (needsInternet) {
+      internetCellId = nextId();
+      // Position above the first VNet
+      const firstVNet = root.children.find(c => c.type === 'vnet');
+      const ix = firstVNet ? Math.round((firstVNet._x || 80) + (firstVNet._w || 300) / 2 - 35) : 300;
+      const iy = 40;
+      cells.push(`<mxCell id="${internetCellId}" value="Users" style="${esc(STYLE.INET)}" vertex="1" parent="1"><mxGeometry x="${ix}" y="${iy}" width="70" height="70" as="geometry" /></mxCell>`);
+    }
+
+    const drawnEdges = new Set();
+    const addEdge = (srcId, tgtId, label, style) => {
+      if (!srcId || !tgtId || srcId === tgtId) return;
+      const key = [srcId, tgtId].join(':');
+      if (drawnEdges.has(key)) return;
+      drawnEdges.add(key);
+      const eid = nextId();
+      cells.push(`<mxCell id="${eid}" value="${esc(label || '')}" style="${esc(edgeStyle(style))}" edge="1" source="${srcId}" target="${tgtId}" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>`);
+    };
+
+    for (const conn of root._connections) {
+      const tgtNodes = findNodesForConn(conn.to, allResNodes);
+      if (!tgtNodes.length) continue;
+      const tgt = tgtNodes[0];
+
+      if (conn.from === '__INTERNET__') {
+        addEdge(internetCellId, tgt.id, conn.label, conn.style || 'bold');
+      } else if (conn.from === '__ALL_APPS__') {
+        for (const src of appNodes) addEdge(src.id, tgt.id, conn.label, conn.style || 'dashed');
+      } else if (conn.from === '__ALL_RES__') {
+        for (const src of allNodes) addEdge(src.id, tgt.id, conn.label, conn.style || 'dotted');
+      } else {
+        const srcNodes = findNodesForConn(conn.from, allResNodes);
+        for (const src of srcNodes) addEdge(src.id, tgt.id, conn.label, conn.style || '');
+      }
+    }
+  }
+
+  const graphModel = `<mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0"><root>${cells.join('')}</root></mxGraphModel>`;
+
+  // Wrap in mxfile format — this tells draw.io which stencil libraries to load.
+  // The 'extFonts' attribute hints at Azure stencil loading in modern draw.io versions.
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="${new Date().toISOString()}" agent="Azure Diagram Generator" version="24.7.5" type="azure">
+  <diagram id="azure-arch" name="Azure Architecture">
+    ${graphModel}
+  </diagram>
+</mxfile>`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// UI ACTIONS
+// ══════════════════════════════════════════════════════════════════
+let _xml = null;
+
+function generateDiagram() {
+  const text = document.getElementById('requirements').value.trim();
+  if (!text) {
+    setStatus('error', '⚠ Please enter your Azure architecture requirements on the left.');
+    return;
+  }
+  try {
+    const tree = parseRequirements(text);
+    layoutTree(tree);
+    _xml = generateXML(tree);
+
+    document.getElementById('xmlOutput').textContent = _xml;
+    document.getElementById('btnDownload').disabled = false;
+    document.getElementById('btnOpen').disabled = false;
+    document.getElementById('btnCopy').disabled = false;
+
+    // Build summary
+    const vnets = tree.children.filter(c => c.type === 'vnet');
+    const items = [];
+    vnets.forEach(v => {
+      items.push({ label: v.name + (v.cidr ? ` (${v.cidr})` : ''), type: v.isHub ? 'Hub VNet' : 'Spoke VNet' });
+      v.children.forEach(sn => {
+        items.push({ label: sn.name + (sn.cidr ? ` (${sn.cidr})` : ''), type: 'Subnet' });
+        sn.children.forEach(r => items.push({ label: r.name, type: r.label || r.rawType }));
+      });
+    });
+
+    const grid = document.getElementById('summaryGrid');
+    grid.innerHTML = items.map(i =>
+      `<div class="summary-item"><div class="type">${esc(i.type)}</div>${esc(i.label)}</div>`
+    ).join('');
+    document.getElementById('summaryCard').style.display = 'block';
+
+    const resCount = vnets.reduce((n, v) => n + v.children.reduce((m, s) => m + s.children.length, 0), 0);
+    setStatus('success', `✅ Generated — ${vnets.length} VNet(s), ${resCount} resource(s). &nbsp;|&nbsp; <strong>For Azure icons:</strong> use <strong>Open draw.io ↗</strong> (loads Azure library automatically). For downloaded files, enable Azure shapes in draw.io: <em>View → Shapes → Azure 2</em>.`);
+
+  } catch (e) {
+    setStatus('error', `❌ Parse error: ${e.message}`);
+    console.error(e);
+  }
+}
+
+function downloadDrawio() {
+  if (!_xml) return;
+  const blob = new Blob([_xml], { type: 'application/xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'azure-architecture.drawio';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function openInDrawio() {
+  // ?libs=azure2 forces draw.io to load the Azure 2 shape library so icons render correctly
+  window.open('https://app.diagrams.net/?libs=azure2', '_blank');
+  copyXML(true);
+  setStatus('info', '📋 XML copied to clipboard. In draw.io: click <strong>Extras → Edit Diagram</strong>, paste the XML, then click <strong>OK</strong>. Azure icons will show correctly because the Azure library was pre-loaded.');
+}
+
+async function copyXML(silent) {
+  if (!_xml) return;
+  try {
+    await navigator.clipboard.writeText(_xml);
+    if (!silent) setStatus('success', '📋 XML copied to clipboard! Open draw.io → Extras → Edit Diagram → paste.');
+  } catch {
+    // Fallback: select the pre element text
+    const pre = document.getElementById('xmlOutput');
+    const range = document.createRange();
+    range.selectNode(pre);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+    if (!silent) setStatus('info', 'XML selected — press Ctrl+C to copy.');
+  }
+}
+
+function clearAll() {
+  document.getElementById('requirements').value = '';
+  document.getElementById('xmlOutput').textContent = '<!-- Generated draw.io XML will appear here -->';
+  document.getElementById('btnDownload').disabled = true;
+  document.getElementById('btnOpen').disabled = true;
+  document.getElementById('btnCopy').disabled = true;
+  document.getElementById('summaryCard').style.display = 'none';
+  _xml = null;
+  setStatus('idle', 'Enter your Azure architecture requirements on the left and click <strong>⚡ Generate</strong>.');
+  updateCount();
+}
+
+function loadExample(name) {
+  if (EXAMPLES[name]) {
+    document.getElementById('requirements').value = EXAMPLES[name];
+    updateCount();
+  }
+}
+
+function setStatus(type, msg) {
+  const el = document.getElementById('statusBar');
+  el.className = `status-bar status-${type}`;
+  el.innerHTML = msg;
+}
+
+function updateCount() {
+  const lines = (document.getElementById('requirements').value.split('\n')
+    .filter(l => l.trim() && !l.trim().startsWith('#'))).length;
+  document.getElementById('lineCount').textContent = `${lines} line${lines !== 1 ? 's' : ''}`;
+}
+
+// ── Event listeners ──
+document.getElementById('requirements').addEventListener('input', updateCount);
+document.getElementById('requirements').addEventListener('keydown', e => {
+  if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); generateDiagram(); }
+});
+
+// Init
+updateCount();
+</script>
+</body>
+</html>

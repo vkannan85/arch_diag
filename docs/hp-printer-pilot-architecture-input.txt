@@ -1,0 +1,56 @@
+HP Printer Pilot - WJA on Azure Architecture
+(Paste this into diagram-generator.html "Requirements" panel and click Generate)
+
+Hub VNet (10.10.0.0/16)
+  Firewall Subnet
+    Azure Firewall
+  Management Subnet
+    WJA VM (Web Jetadmin)
+    HP Access Control Auth Server VM
+  Gateway Subnet
+    VPN Gateway
+
+HP Cloud Services
+  HP Insights Portal
+  HP Insights Cloud Connector
+
+Pilot Site 1 - ExpressRoute VNet (10.11.0.0/24)
+  Print Subnet
+    2x HP MFP with IPP Everywhere
+    Badge Reader Accessory
+  Client Subnet
+    Windows 11 Clients (Windows Protected Print Mode)
+
+Pilot Site 2 - VPN Internet Breakout VNet (10.12.0.0/24)
+  Print Subnet
+    2x HP MFP with IPP Everywhere
+    Badge Reader Accessory
+  Client Subnet
+    Windows 11 Clients (Windows Protected Print Mode)
+
+Pilot Site 3 - High Latency Site VNet (10.13.0.0/24)
+  Print Subnet
+    2x HP MFP with IPP Everywhere
+    Badge Reader Accessory
+  Client Subnet
+    Windows 11 Clients (Windows Protected Print Mode)
+
+Pilot Site 4 - Legacy Print Server Coexistence VNet (10.14.0.0/24)
+  Print Subnet
+    2x HP MFP with IPP Everywhere
+    Badge Reader Accessory
+    Legacy Print Server (parallel run)
+  Client Subnet
+    Windows 11 Clients (Windows Protected Print Mode)
+
+Pilot Site 5 - Guest and Hot-Desk Site VNet (10.15.0.0/24)
+  Print Subnet
+    2x HP MFP with IPP Everywhere
+    Badge Reader Accessory
+  Client Subnet
+    Windows 11 Clients (Windows Protected Print Mode)
+    Guest and Mobile Devices (AirPrint/Mopria)
+
+Identity
+  Azure AD / Entra ID
+  Badge Identity Mapping Service

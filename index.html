@@ -96,39 +96,26 @@ function applyRefinement(){
 }
 function rebuildEdges(preserve=false){let existing=preserve?model.edges.slice():[];let fresh=parse(document.getElementById('req').value+'\n'+document.getElementById('refine').value);let byType=new Map(model.nodes.map(n=>[n.type,n]));model.edges=fresh.edges.map(e=>{let a=fresh.nodes.find(n=>n.id===e.from),b=fresh.nodes.find(n=>n.id===e.to),aa=a&&byType.get(a.type),bb=b&&byType.get(b.type);return aa&&bb?{from:aa.id,to:bb.id,label:e.label||''}:null}).filter(Boolean);existing.forEach(e=>{if(model.nodes.some(n=>n.id===e.from)&&model.nodes.some(n=>n.id===e.to)&&!model.edges.some(x=>x.from===e.from&&x.to===e.to))model.edges.push(e)});if(model.nodes.length>1&&!model.edges.length)for(let i=0;i<model.nodes.length-1;i++)model.edges.push({from:model.nodes[i].id,to:model.nodes[i+1].id,label:''})}
 function layout(){
- const groups=[...new Set(model.nodes.map(n=>n.group))],pos={},margin=25,gap=55,nodeW=160,nodeH=82,colGap=25,rowGap=28,head=70,pad=25;
- const configs={'Application':{x:25,y:80,cols:2},'Hub / Connectivity':{x:600,y:80,cols:2},'Data / Security':{x:25,y:470,cols:3}};
- let fallbackX=25,fallbackY=860;
- groups.forEach(g=>{let ns=model.nodes.filter(n=>n.group===g),cfg=configs[g]||{x:fallbackX,y:fallbackY,cols:3},cols=Math.min(cfg.cols,Math.max(1,ns.length)),rows=Math.ceil(ns.length/cols);
-   let w=pad*2+cols*nodeW+(cols-1)*colGap,h=head+rows*nodeH+(rows-1)*rowGap+pad;
-   pos['g:'+g]={x:cfg.x,y:cfg.y,w,h};
-   ns.forEach((n,i)=>{let col=i%cols,row=Math.floor(i/cols);pos[n.id]={x:cfg.x+pad+col*(nodeW+colGap),y:cfg.y+head+row*(nodeH+rowGap)}});
-   if(!configs[g])fallbackY+=h+gap;
- });return pos
+ const groups=[...new Set(model.nodes.map(n=>n.group))],pos={},nodeW=160,nodeH=82,colGap=34,rowGap=34,head=62,pad=28,groupGap=60;
+ // Flow layout: each group is positioned after the actual height of the previous row,
+ // so a growing Application group can never collide with Data / Security.
+ const order=['Application','Hub / Connectivity','Data / Security',...groups.filter(g=>!['Application','Hub / Connectivity','Data / Security'].includes(g))];
+ const app=groups.includes('Application')?model.nodes.filter(n=>n.group==='Application'):[];
+ const hub=groups.includes('Hub / Connectivity')?model.nodes.filter(n=>n.group==='Hub / Connectivity'):[];
+ function size(ns,cols){cols=Math.min(cols,Math.max(1,ns.length));let rows=Math.ceil(ns.length/cols);return {cols,rows,w:pad*2+cols*nodeW+(cols-1)*colGap,h:head+rows*nodeH+Math.max(0,rows-1)*rowGap+pad}}
+ let appSz=size(app,2),hubSz=size(hub,2),topY=70,appX=25,hubX=Math.max(600,appX+appSz.w+70),topH=Math.max(appSz.h,hubSz.h),nextY=topY+topH+groupGap;
+ let cfg={};
+ if(app.length)cfg['Application']={x:appX,y:topY,cols:2};
+ if(hub.length)cfg['Hub / Connectivity']={x:hubX,y:topY,cols:2};
+ if(groups.includes('Data / Security'))cfg['Data / Security']={x:25,y:nextY,cols:3};
+ let fallbackY=nextY;
+ order.filter(g=>groups.includes(g)).forEach(g=>{let ns=model.nodes.filter(n=>n.group===g),q=cfg[g]||{x:25,y:fallbackY,cols:3},z=size(ns,q.cols);
+   pos['g:'+g]={x:q.x,y:q.y,w:z.w,h:z.h};
+   ns.forEach((n,i)=>{let col=i%z.cols,row=Math.floor(i/z.cols);pos[n.id]={x:q.x+pad+col*(nodeW+colGap),y:q.y+head+row*(nodeH+rowGap)}});
+   if(!cfg[g])fallbackY=q.y+z.h+groupGap;
+ });
+ return pos
 }
-function architectureReview(){
- const has=t=>model.nodes.some(n=>n.type===t), azure=model.nodes.some(n=>n.provider==='Azure'), findings=[];
- const add=(pillar,severity,title,detail,action='')=>findings.push({pillar,severity,title,detail,action});
- if(!azure)return [{pillar:'Review',severity:'good',title:'Azure CAF/WAF review not applicable',detail:'This diagram does not currently contain Azure services.'}];
- // WAF workload checks: Reliability, Security, Cost, Operational Excellence, Performance.
- if(!has('monitor')&&!has('loganalytics')&&!has('insights'))add('WAF · Operational Excellence','high','Observability is missing','Add centralized metrics, logs and application telemetry.','Add Azure Monitor and Log Analytics');
- else add('WAF · Operational Excellence','good','Observability detected','Monitoring or telemetry services are represented in the architecture.');
- if(!has('keyvault'))add('WAF · Security','med','Secrets management not shown','Consider Azure Key Vault and managed identity for workload secrets.','Add Azure Key Vault');
- if((has('sql')||has('storage')||has('keyvault'))&&!has('privateendpoint'))add('WAF · Security','high','Private access not shown','Data/security services may need Private Endpoints and restricted public network access.','Add Private Endpoint');
- if((has('appservice')||has('aks')||has('vm'))&&!has('frontdoor')&&!has('loadbalancer'))add('WAF · Reliability','med','Ingress resilience not shown','Review load distribution, health probes, redundancy and failure domains.');
- if(has('vm')&&!/availability zone|zone redundant|multi.?zone/i.test(document.getElementById('req').value))add('WAF · Reliability','med','Failure-domain strategy unclear','Define availability-zone or other redundancy requirements for compute.');
- add('WAF · Cost Optimization','med','Cost requirements need workload context','Confirm budgets, expected utilization, scaling model, reservations/savings options and non-production shutdown policy.');
- add('WAF · Performance Efficiency','med','Capacity requirements need workload context','Define expected users/transactions, latency targets, peak demand and scaling requirements.');
- // CAF / Landing Zone checks.
- if(!has('vnet')&&(has('firewall')||has('vpn')||has('privateendpoint')||has('vm')))add('CAF · Network topology','high','Network boundary incomplete','Show workload/platform VNets and subnet boundaries.','Add Virtual Network');
- if(!has('firewall')&&/internet|public|external/i.test(document.getElementById('req').value))add('CAF · Security / Network','med','Central network control not shown','Review whether Azure Firewall/WAF or another inspected ingress/egress control is required.','Add Azure Firewall');
- if(!/entra|managed identity|rbac|identity/i.test(document.getElementById('req').value))add('CAF · Identity','med','Identity model not documented','Define Microsoft Entra ID, RBAC, managed identities and privileged-access approach.');
- if(!/policy|management group|subscription|landing zone|tag/i.test(document.getElementById('req').value))add('CAF · Governance','med','Governance scope not documented','Define subscriptions/management groups, Azure Policy, naming, tagging and cost ownership.');
- if(!findings.some(x=>x.severity!=='good'))add('CAF/WAF','good','No baseline gaps detected','No obvious rule-based gaps were found; validate business requirements and trade-offs before production.');
- return findings;
-}
-function applyReviewAction(i){let f=architectureReview()[i];if(!f||!f.action)return;document.getElementById('refine').value=f.action;applyRefinement()}
-function renderReview(){let fs=architectureReview(),el=document.getElementById('review');if(!el)return;el.innerHTML=fs.map((f,i)=>'<div class="card"><div class="reviewHead"><b>'+escapeHtml(f.pillar)+'</b><span class="sev '+(f.severity==='high'?'high':f.severity==='good'?'good':'med')+'">'+(f.severity==='high'?'High':f.severity==='good'?'OK':'Review')+'</span></div><p><strong>'+escapeHtml(f.title)+'</strong><br>'+escapeHtml(f.detail)+'</p>'+(f.action?'<button class="reviewBtn" onclick="applyReviewAction('+i+')">Apply recommendation</button>':'')+'</div>').join('')}
 function render(){
  let d=document.getElementById('diagram');let p=layout();d.innerHTML='';
  [...new Set(model.nodes.map(n=>n.group))].forEach(g=>{let q=p['g:'+g],el=document.createElement('div');el.className='group '+(g.includes('Hub')?'hub':'');Object.assign(el.style,{left:q.x+'px',top:q.y+'px',width:q.w+'px',height:q.h+'px'});el.innerHTML='<div class="groupTitle">'+g+'</div>';d.appendChild(el)});

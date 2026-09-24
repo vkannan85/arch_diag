@@ -77,6 +77,17 @@ function parse(text){
  if(desiredVm>1){let vms=nodes.filter(n=>n.type==='vm');vms.forEach((n,i)=>{if(n.name==='Virtual Machine')n.name='Virtual Machine '+(i+1)})}
  if(!nodes.length){text.split(/\n|\.|;/).map(x=>x.trim()).filter(x=>x.length>3).slice(0,10).forEach(x=>nodes.push(nodeFor('generic',x)))}
  nodes.forEach(n=>{if(['firewall','bastion','vpn','vnet'].includes(n.type))n.group='Hub / Connectivity';else if(['sql','storage','redis','keyvault','privateendpoint'].includes(n.type))n.group='Data / Security';else n.group='Application'});
+ // Placement intent: understand phrases such as "VMs in the Hub", "place VMs in the hub",
+ // "VMs behind the firewall", and equivalent spoke/application placement.
+ const placementLines=text.split(/\n|;/).map(x=>x.trim()).filter(Boolean);
+ placementLines.forEach(line=>{
+   let l=line.toLowerCase(),mentionsVm=/\b(vm|vms|virtual machine|virtual machines|session host|session hosts)\b/.test(l);
+   if(!mentionsVm)return;
+   if(/\b(in|inside|within|place|deploy|move).*\bhub\b|\bhub\b.*\b(vm|vms|virtual machine|virtual machines)\b/.test(l)||/behind\s+(?:the\s+)?firewall/.test(l))
+     nodes.filter(n=>n.type==='vm').forEach(n=>n.group='Hub / Connectivity');
+   else if(/\b(in|inside|within|place|deploy|move).*\b(application|app|spoke)\b|\b(application|app|spoke)\b.*\b(vm|vms|virtual machine|virtual machines)\b/.test(l))
+     nodes.filter(n=>n.type==='vm').forEach(n=>n.group='Application');
+ });
  let edges=[],add=(a,b,label='')=>{if(a&&b&&a.id!==b.id&&!edges.some(e=>e.from===a.id&&e.to===b.id))edges.push({from:a.id,to:b.id,label})},get=t=>nodes.find(n=>n.type===t);
  // Explicit "A -> B" connections in requirements.
  text.split(/\n|;/).forEach(line=>{let m=line.match(/^\s*(.+?)\s*->\s*(.+?)\s*$/);if(!m)return;let a=findType(m[1]),b=findType(m[2]);if(a&&b)add(get(a[0]),get(b[0]))});
@@ -85,7 +96,12 @@ function parse(text){
  for(let i=0;i<chain.length-1;i++)add(chain[i],chain[i+1]);
  let workload=get('appservice')||get('function')||get('aks')||get('vm')||get('ec2')||get('lambda');
  ['sql','storage','redis','keyvault','servicebus','insights','monitor','loganalytics','s3','rds'].forEach(t=>add(workload,get(t)));
- add(get('vpn'),get('firewall'));add(get('bastion'),get('vm'));add(get('vm'),get('storage'));add(get('vm'),get('keyvault'));add(get('vm'),get('monitor'));add(get('vm'),get('loganalytics'));add(get('storage'),get('privateendpoint'));add(get('keyvault'),get('privateendpoint'));
+ add(get('vpn'),get('firewall'));add(get('bastion'),get('vm'));
+ // If requirements put VMs behind/controlled by the firewall, connect the firewall to every VM.
+ if(/(?:behind|controlled by|access(?:\s+to)?).*firewall|firewall.*(?:controls?|protects?).*(?:vm|virtual machine)/i.test(text)){
+   let fw=get('firewall');nodes.filter(n=>n.type==='vm').forEach(vm=>add(fw,vm));
+ }
+ add(get('vm'),get('storage'));add(get('vm'),get('keyvault'));add(get('vm'),get('monitor'));add(get('vm'),get('loganalytics'));add(get('storage'),get('privateendpoint'));add(get('keyvault'),get('privateendpoint'));
  // Natural-language connection commands are cumulative too.
  text.split(/\n|;/).forEach(line=>{let m=line.match(/connect\s+(.+?)\s+to\s+(.+)/i);if(!m)return;let a=findType(m[1]),b=findType(m[2]);if(a&&b)add(get(a[0]),get(b[0]))});
  // Apply every accumulated remove/delete directive so deleted services do not reappear on later refinements.

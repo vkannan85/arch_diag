@@ -83,22 +83,27 @@ function parse(text){
 function snapshot(note){model.version++; versions.push({note,model:JSON.parse(JSON.stringify(model)),time:new Date().toLocaleTimeString()});render()}
 function generate(){model=parse(document.getElementById('req').value);model.version=0;versions=[];snapshot('Generated from requirements')}
 function applyRefinement(){
- let txt=document.getElementById('refine').value.trim();if(!txt)return;
- let low=txt.toLowerCase(),changed=false;
- const addType=(d)=>{if(!model.nodes.some(n=>n.type===d[0])){let n=nodeFor(d[0],d[1]);n.group=['sql','storage','redis','keyvault','privateendpoint'].includes(n.type)?'Data / Security':['firewall','bastion','vpn','vnet'].includes(n.type)?'Hub / Connectivity':'Application';model.nodes.push(n);changed=true}};
- defs.forEach(d=>{if((/\b(add|include|put|deploy|use|create)\b/.test(low))&&d[2].some(k=>low.includes(k)))addType(d)});
- if(/\b(remove|delete)\b/.test(low)){defs.forEach(d=>{if(d[2].some(k=>low.includes(k))){let ids=model.nodes.filter(n=>n.type===d[0]).map(n=>n.id);if(ids.length)changed=true;model.nodes=model.nodes.filter(n=>!ids.includes(n.id));model.edges=model.edges.filter(e=>!ids.includes(e.from)&&!ids.includes(e.to))}})}
- let rm=txt.match(/rename\s+(.+?)\s+to\s+(.+)/i);if(rm){let q=rm[1].trim().toLowerCase(),n=model.nodes.find(n=>n.name.toLowerCase().includes(q)||q.includes(n.name.toLowerCase()));if(n){n.name=rm[2].trim();changed=true}}
- // Explicit connection refinement: "connect A to B" or "A -> B".
+ const el=document.getElementById('refine'), txt=(el.value||'').trim(); if(!txt)return;
+ const before=JSON.stringify(model), low=txt.toLowerCase();
+ // Parse the refinement as architecture requirements. This supports natural phrases,
+ // not only commands beginning with "add".
+ const delta=parse(txt);
+ delta.nodes.forEach(dn=>{if(!model.nodes.some(n=>n.type===dn.type)){let n=nodeFor(dn.type,dn.name);n.group=dn.group;model.nodes.push(n)}});
+ // Explicit removals.
+ if(/\b(remove|delete)\b/.test(low)) defs.forEach(d=>{if(d[2].some(k=>low.includes(k))){let ids=model.nodes.filter(n=>n.type===d[0]).map(n=>n.id);model.nodes=model.nodes.filter(n=>!ids.includes(n.id));model.edges=model.edges.filter(e=>!ids.includes(e.from)&&!ids.includes(e.to))}});
+ // Rename.
+ let rm=txt.match(/rename\s+(.+?)\s+to\s+(.+)/i);if(rm){let q=rm[1].trim().toLowerCase(),n=model.nodes.find(n=>n.name.toLowerCase().includes(q)||q.includes(n.name.toLowerCase()));if(n)n.name=rm[2].trim()}
+ // Merge connections from the refinement by component type.
+ let byType=new Map(model.nodes.map(n=>[n.type,n]));
+ delta.edges.forEach(e=>{let da=delta.nodes.find(n=>n.id===e.from),db=delta.nodes.find(n=>n.id===e.to),aa=da&&byType.get(da.type),bb=db&&byType.get(db.type);if(aa&&bb&&!model.edges.some(x=>x.from===aa.id&&x.to===bb.id))model.edges.push({from:aa.id,to:bb.id,label:e.label||''})});
  let cm=txt.match(/connect\s+(.+?)\s+to\s+(.+)/i)||txt.match(/^\s*(.+?)\s*->\s*(.+?)\s*$/i);
- if(cm){let da=findType(cm[1]),db=findType(cm[2]),na=da&&model.nodes.find(n=>n.type===da[0]),nb=db&&model.nodes.find(n=>n.type===db[0]);if(na&&nb&&!model.edges.some(e=>e.from===na.id&&e.to===nb.id)){model.edges.push({from:na.id,to:nb.id,label:''});changed=true}}
+ if(cm){let da=findType(cm[1]),db=findType(cm[2]),aa=da&&byType.get(da[0]),bb=db&&byType.get(db[0]);if(aa&&bb&&!model.edges.some(e=>e.from===aa.id&&e.to===bb.id))model.edges.push({from:aa.id,to:bb.id,label:''})}
+ const reqEl=document.getElementById('req');reqEl.value=(reqEl.value.trim()+'\n'+txt).trim();
+ // Rebuild defaults while preserving explicit refinement edges.
  rebuildEdges(true);
- // Persist the refinement into the working requirements so future refinements build on it.
- const reqEl=document.getElementById('req');
- reqEl.value=(reqEl.value.trim()+'\n'+txt).trim();
- snapshot(txt+(changed?'':' (connections/layout refreshed)'));
+ snapshot(txt+(before===JSON.stringify(model)?' · requirements updated':''));
+ el.value='';
  render();
- document.getElementById('refine').value='';
 }
 function rebuildEdges(preserve=false){let existing=preserve?model.edges.slice():[];let fresh=parse(document.getElementById('req').value+'\n'+document.getElementById('refine').value);let byType=new Map(model.nodes.map(n=>[n.type,n]));model.edges=fresh.edges.map(e=>{let a=fresh.nodes.find(n=>n.id===e.from),b=fresh.nodes.find(n=>n.id===e.to),aa=a&&byType.get(a.type),bb=b&&byType.get(b.type);return aa&&bb?{from:aa.id,to:bb.id,label:e.label||''}:null}).filter(Boolean);existing.forEach(e=>{if(model.nodes.some(n=>n.id===e.from)&&model.nodes.some(n=>n.id===e.to)&&!model.edges.some(x=>x.from===e.from&&x.to===e.to))model.edges.push(e)});if(model.nodes.length>1&&!model.edges.length)for(let i=0;i<model.nodes.length-1;i++)model.edges.push({from:model.nodes[i].id,to:model.nodes[i+1].id,label:''})}
 function layout(){

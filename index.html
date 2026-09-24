@@ -76,6 +76,12 @@ function parse(text){
  let workload=get('appservice')||get('function')||get('aks')||get('vm')||get('ec2')||get('lambda');
  ['sql','storage','redis','keyvault','servicebus','insights','monitor','loganalytics','s3','rds'].forEach(t=>add(workload,get(t)));
  add(get('vpn'),get('firewall'));add(get('bastion'),get('vm'));add(get('vm'),get('storage'));add(get('vm'),get('keyvault'));add(get('vm'),get('monitor'));add(get('vm'),get('loganalytics'));add(get('storage'),get('privateendpoint'));add(get('keyvault'),get('privateendpoint'));
+ // Natural-language connection commands are cumulative too.
+ text.split(/\n|;/).forEach(line=>{let m=line.match(/connect\s+(.+?)\s+to\s+(.+)/i);if(!m)return;let a=findType(m[1]),b=findType(m[2]);if(a&&b)add(get(a[0]),get(b[0]))});
+ // Apply every accumulated remove/delete directive so deleted services do not reappear on later refinements.
+ text.split(/\n|;/).forEach(line=>{if(!/\b(remove|delete)\b/i.test(line))return;defs.forEach(d=>{if(d[2].some(k=>line.toLowerCase().includes(k))){let doomed=nodes.filter(n=>n.type===d[0]).map(n=>n.id);nodes=nodes.filter(n=>n.type!==d[0]);edges=edges.filter(e=>!doomed.includes(e.from)&&!doomed.includes(e.to))}})});
+ // Apply accumulated renames after detection.
+ text.split(/\n|;/).forEach(line=>{let m=line.match(/rename\s+(.+?)\s+to\s+(.+)/i);if(!m)return;let d=findType(m[1]);if(d){let n=nodes.find(n=>n.type===d[0]);if(n)n.name=m[2].trim()}});
  // Never leave a multi-component diagram visually disconnected.
  if(nodes.length>1&&edges.length===0)for(let i=0;i<nodes.length-1;i++)add(nodes[i],nodes[i+1]);
  return {nodes,edges,version:model.version+1};
@@ -89,7 +95,7 @@ function applyRefinement(){
  // specification on every refinement so refinement #2, #3, etc. cannot lose prior changes.
  let next=parse(combined);
  // Preserve user-facing names for component types that still exist.
- let oldNames=new Map(model.nodes.map(n=>[n.type,n.name]));next.nodes.forEach(n=>{if(oldNames.has(n.type))n.name=oldNames.get(n.type)});
+ let oldNodes=new Map(model.nodes.map(n=>[n.type,n]));next.nodes.forEach(n=>{let old=oldNodes.get(n.type);if(old){n.id=old.id;if(old.name!==defs.find(d=>d[0]===n.type)?.[1])n.name=old.name}});
  // Explicit removals must also remove earlier requirements, otherwise a later reparse revives them.
  if(/\b(remove|delete)\b/i.test(txt)){defs.forEach(d=>{if(d[2].some(k=>txt.toLowerCase().includes(k))){next.nodes=next.nodes.filter(n=>n.type!==d[0]);let ids=new Set(next.nodes.map(n=>n.id));next.edges=next.edges.filter(e=>ids.has(e.from)&&ids.has(e.to))}})}
  let rm=txt.match(/rename\s+(.+?)\s+to\s+(.+)/i);if(rm){let q=rm[1].trim().toLowerCase(),n=next.nodes.find(n=>n.name.toLowerCase().includes(q)||q.includes(n.name.toLowerCase()));if(n)n.name=rm[2].trim()}

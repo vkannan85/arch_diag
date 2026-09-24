@@ -65,6 +65,16 @@ function nodeFor(type,name){let d=defs.find(x=>x[0]===type);return {id:uid(),typ
 function parse(text){
  let nodes=[],lower=text.toLowerCase();
  defs.forEach(d=>{if(d[2].some(k=>lower.includes(k)))nodes.push(nodeFor(d[0],d[1]))});
+ // Support explicit quantities and additive instances (e.g. "2 VMs", "another VM",
+ // "add another virtual machine") instead of treating every service type as a singleton.
+ const vmDef=defs.find(d=>d[0]==='vm'), vmWords='(?:virtual machine|virtual machines|vm|vms|session host|session hosts)';
+ let desiredVm=0,m;
+ let qtyRe=new RegExp('\\b(\\d+)\\s+'+vmWords,'ig');while((m=qtyRe.exec(text)))desiredVm=Math.max(desiredVm,parseInt(m[1],10));
+ let anotherRe=new RegExp('(?:add|include|deploy|create|use)?\\s*(?:another|additional|second)\\s+'+vmWords,'ig'),adds=0;while(anotherRe.exec(text))adds++;
+ let existingVm=nodes.filter(n=>n.type==='vm').length;
+ desiredVm=Math.max(desiredVm, existingVm+(adds?adds:0));
+ while(nodes.filter(n=>n.type==='vm').length<desiredVm){let i=nodes.filter(n=>n.type==='vm').length+1;nodes.push(nodeFor('vm','Virtual Machine '+i))}
+ if(desiredVm>1){let vms=nodes.filter(n=>n.type==='vm');vms.forEach((n,i)=>{if(n.name==='Virtual Machine')n.name='Virtual Machine '+(i+1)})}
  if(!nodes.length){text.split(/\n|\.|;/).map(x=>x.trim()).filter(x=>x.length>3).slice(0,10).forEach(x=>nodes.push(nodeFor('generic',x)))}
  nodes.forEach(n=>{if(['firewall','bastion','vpn','vnet'].includes(n.type))n.group='Hub / Connectivity';else if(['sql','storage','redis','keyvault','privateendpoint'].includes(n.type))n.group='Data / Security';else n.group='Application'});
  let edges=[],add=(a,b,label='')=>{if(a&&b&&a.id!==b.id&&!edges.some(e=>e.from===a.id&&e.to===b.id))edges.push({from:a.id,to:b.id,label})},get=t=>nodes.find(n=>n.type===t);
@@ -95,7 +105,8 @@ function applyRefinement(){
  // specification on every refinement so refinement #2, #3, etc. cannot lose prior changes.
  let next=parse(combined);
  // Preserve user-facing names for component types that still exist.
- let oldNodes=new Map(model.nodes.map(n=>[n.type,n]));next.nodes.forEach(n=>{let old=oldNodes.get(n.type);if(old){n.id=old.id;if(old.name!==defs.find(d=>d[0]===n.type)?.[1])n.name=old.name}});
+ let oldByType={};model.nodes.forEach(n=>(oldByType[n.type]||(oldByType[n.type]=[])).push(n));
+ let seen={};next.nodes.forEach(n=>{let i=seen[n.type]||0,old=oldByType[n.type]?.[i];seen[n.type]=i+1;if(old){n.id=old.id;if(old.name!==defs.find(d=>d[0]===n.type)?.[1]&&!/^Virtual Machine \\d+$/.test(n.name))n.name=old.name}});
  // Explicit removals must also remove earlier requirements, otherwise a later reparse revives them.
  if(/\b(remove|delete)\b/i.test(txt)){defs.forEach(d=>{if(d[2].some(k=>txt.toLowerCase().includes(k))){next.nodes=next.nodes.filter(n=>n.type!==d[0]);let ids=new Set(next.nodes.map(n=>n.id));next.edges=next.edges.filter(e=>ids.has(e.from)&&ids.has(e.to))}})}
  let rm=txt.match(/rename\s+(.+?)\s+to\s+(.+)/i);if(rm){let q=rm[1].trim().toLowerCase(),n=next.nodes.find(n=>n.name.toLowerCase().includes(q)||q.includes(n.name.toLowerCase()));if(n)n.name=rm[2].trim()}

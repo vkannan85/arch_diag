@@ -81,7 +81,7 @@ function parse(text){
  return {nodes,edges,version:model.version+1};
 }
 function snapshot(note){model.version++; versions.push({note,model:JSON.parse(JSON.stringify(model)),time:new Date().toLocaleTimeString()});render()}
-function generate(){model=parse(document.getElementById('req').value);model.version=0;versions=[];snapshot('Generated from requirements')}
+function generate(){model=parse(document.getElementById('req').value);model.version=0;versions=[];snapshot('Generated from requirements');setTimeout(()=>{renderReview();render()},0)}
 function applyRefinement(){
  let txt=document.getElementById('refine').value.trim();if(!txt)return;
  let low=txt.toLowerCase(),changed=false;

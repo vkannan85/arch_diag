@@ -20,7 +20,7 @@ Secrets are stored in Key Vault.
 Monitoring uses Application Insights."></textarea><div class="hint">Plain English is supported. The model recognises common Azure components and connections.</div></div>
  <div class="row section"><button class="primary" onclick="generate()">Generate diagram</button><button onclick="example()">Example</button></div>
  <div class="section"><label>Refine current diagram</label><textarea class="refine" id="refine" placeholder="e.g. Add Redis Cache; remove Blob Storage; add Azure Front Door; rename SQL Database to Customer DB"></textarea><button class="primary" style="width:100%;margin-top:8px" onclick="applyRefinement()">Apply refinement</button><div class="hint">Each refinement creates a version. Existing component IDs are preserved when possible.</div></div>
- <div class="row"><button class="green" onclick="downloadSVG()">Export editable SVG</button><button onclick="downloadJSON()">Export model</button></div>
+ <div class="row"><button class="green" onclick="downloadDrawio()">Export editable draw.io</button><button onclick="downloadSVG()">Export SVG</button><button onclick="downloadJSON()">Export model</button></div>
 </aside>
 <main class="canvasWrap">
  <div class="canvasTop"><b>Architecture diagram</b><span id="count" class="pill">0 components</span><span class="spacer"></span><button onclick="undo()">Undo</button><button onclick="fit()">Fit</button></div>
@@ -63,15 +63,21 @@ const uid=()=> 'n'+Math.random().toString(36).slice(2,9);
 function findType(text){let l=text.toLowerCase();return defs.find(d=>d[2].some(k=>l.includes(k)))}
 function nodeFor(type,name){let d=defs.find(x=>x[0]===type);return {id:uid(),type:type||'generic',name:name||'Component',group:'Workload',icon:d?.[3]||'',provider:d?.[4]||'Generic'}}
 function parse(text){
- let nodes=[]; let lower=text.toLowerCase();
+ let nodes=[],lower=text.toLowerCase();
  defs.forEach(d=>{if(d[2].some(k=>lower.includes(k)))nodes.push(nodeFor(d[0],d[1]))});
  if(!nodes.length){text.split(/\n|\.|;/).map(x=>x.trim()).filter(x=>x.length>3).slice(0,10).forEach(x=>nodes.push(nodeFor('generic',x)))}
- nodes.forEach(n=>{if(['firewall','bastion','vpn'].includes(n.type))n.group='Hub / Connectivity'; else if(['sql','storage','redis','keyvault'].includes(n.type))n.group='Data / Security'; else n.group='Application'});
- let edges=[]; const get=t=>nodes.find(n=>n.type===t);
- const chain=['frontdoor','firewall','loadbalancer','apim','appservice','function','aks'].map(get).filter(Boolean);
- for(let i=0;i<chain.length-1;i++)edges.push({from:chain[i].id,to:chain[i+1].id,label:''});
- const apps=nodes.filter(n=>['appservice','function','aks','apim'].includes(n.type));
- nodes.filter(n=>['sql','storage','redis','keyvault','servicebus','insights','monitor'].includes(n.type)).forEach(t=>{if(apps[apps.length-1])edges.push({from:apps[apps.length-1].id,to:t.id,label:''})});
+ nodes.forEach(n=>{if(['firewall','bastion','vpn','vnet'].includes(n.type))n.group='Hub / Connectivity';else if(['sql','storage','redis','keyvault','privateendpoint'].includes(n.type))n.group='Data / Security';else n.group='Application'});
+ let edges=[],add=(a,b,label='')=>{if(a&&b&&a.id!==b.id&&!edges.some(e=>e.from===a.id&&e.to===b.id))edges.push({from:a.id,to:b.id,label})},get=t=>nodes.find(n=>n.type===t);
+ // Explicit "A -> B" connections in requirements.
+ text.split(/\n|;/).forEach(line=>{let m=line.match(/^\s*(.+?)\s*->\s*(.+?)\s*$/);if(!m)return;let a=findType(m[1]),b=findType(m[2]);if(a&&b)add(get(a[0]),get(b[0]))});
+ // Sensible architecture flows for supported services.
+ let chain=['frontdoor','firewall','loadbalancer','apim','appservice','function','aks'].map(get).filter(Boolean);
+ for(let i=0;i<chain.length-1;i++)add(chain[i],chain[i+1]);
+ let workload=get('appservice')||get('function')||get('aks')||get('vm')||get('ec2')||get('lambda');
+ ['sql','storage','redis','keyvault','servicebus','insights','monitor','loganalytics','s3','rds'].forEach(t=>add(workload,get(t)));
+ add(get('vpn'),get('firewall'));add(get('bastion'),get('vm'));add(get('vm'),get('storage'));add(get('vm'),get('keyvault'));add(get('vm'),get('monitor'));add(get('vm'),get('loganalytics'));add(get('storage'),get('privateendpoint'));add(get('keyvault'),get('privateendpoint'));
+ // Never leave a multi-component diagram visually disconnected.
+ if(nodes.length>1&&edges.length===0)for(let i=0;i<nodes.length-1;i++)add(nodes[i],nodes[i+1]);
  return {nodes,edges,version:model.version+1};
 }
 function snapshot(note){model.version++; versions.push({note,model:JSON.parse(JSON.stringify(model)),time:new Date().toLocaleTimeString()});render()}
@@ -84,7 +90,7 @@ function applyRefinement(){
  let rm=txt.match(/rename\s+(.+?)\s+to\s+(.+)/i);if(rm){let q=rm[1].toLowerCase();let n=model.nodes.find(n=>n.name.toLowerCase().includes(q)||q.includes(n.name.toLowerCase()));if(n)n.name=rm[2].trim()}
  rebuildEdges();snapshot(txt);document.getElementById('refine').value='';
 }
-function rebuildEdges(){let nodes=model.nodes,edges=[];const get=t=>nodes.find(n=>n.type===t);let chain=['frontdoor','firewall','loadbalancer','apim','appservice','function','aks'].map(get).filter(Boolean);for(let i=0;i<chain.length-1;i++)edges.push({from:chain[i].id,to:chain[i+1].id,label:''});let app=chain[chain.length-1];if(app)nodes.filter(n=>['sql','storage','redis','keyvault','servicebus','insights','monitor'].includes(n.type)).forEach(t=>edges.push({from:app.id,to:t.id,label:''}));model.edges=edges}
+function rebuildEdges(){let fresh=parse(document.getElementById('req').value+'\n'+document.getElementById('refine').value);let byType=new Map(model.nodes.map(n=>[n.type,n]));model.edges=fresh.edges.map(e=>{let a=fresh.nodes.find(n=>n.id===e.from),b=fresh.nodes.find(n=>n.id===e.to),aa=a&&byType.get(a.type),bb=b&&byType.get(b.type);return aa&&bb?{from:aa.id,to:bb.id,label:e.label||''}:null}).filter(Boolean);if(model.nodes.length>1&&!model.edges.length)for(let i=0;i<model.nodes.length-1;i++)model.edges.push({from:model.nodes[i].id,to:model.nodes[i+1].id,label:''})}
 function layout(){
  let groups=[...new Set(model.nodes.map(n=>n.group))],pos={},gx=25;
  groups.forEach((g,gi)=>{let ns=model.nodes.filter(n=>n.group===g),w=Math.max(390,Math.ceil(ns.length/2)*190+35),h=gi===1?330:250;let y=gi===1?80:gi===0?80:430;if(gi===2){gx=25;w=Math.max(700,Math.ceil(ns.length/3)*175+35)};pos['g:'+g]={x:gx,y,w,h};ns.forEach((n,i)=>{let cols=gi===2?3:2;pos[n.id]={x:gx+25+(i%cols)*185,y:y+70+Math.floor(i/cols)*105}});gx+=w+45});return pos
@@ -111,6 +117,14 @@ function svgText(){
  model.edges.forEach(e=>{let a=p[e.from],b=p[e.to];if(a&&b)s.push('<line x1="'+(a.x+72)+'" y1="'+(a.y+36)+'" x2="'+(b.x+72)+'" y2="'+(b.y+36)+'" stroke="#64748b" stroke-width="2"/>')});
  model.nodes.forEach(n=>{let q=p[n.id];s.push('<g id="'+n.id+'"><rect x="'+q.x+'" y="'+q.y+'" width="145" height="72" rx="11" fill="white" stroke="#bdc9db"/>'+(n.icon?'<image href="'+n.icon+'" x="'+(q.x+9)+'" y="'+(q.y+17)+'" width="38" height="38"/>':'')+'<text x="'+(q.x+53)+'" y="'+(q.y+31)+'" font-family="Segoe UI" font-size="12" font-weight="700" fill="#17233c">'+escapeHtml(n.name)+'</text><text x="'+(q.x+53)+'" y="'+(q.y+49)+'" font-family="Segoe UI" font-size="10" fill="#6c7890">'+escapeHtml(n.provider||n.type)+'</text></g>')});s.push('</svg>');return s.join('')}
 function save(data,name,type){let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500)}
+function drawioText(){
+ let p=layout(),cells=['<mxCell id="0"/>','<mxCell id="1" parent="0"/>'];
+ const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+ model.nodes.forEach(n=>{let q=p[n.id],style='rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9fb2ca;fontSize=12;verticalAlign=middle;spacingLeft=48;';if(n.icon)style+='image='+esc(n.icon)+';imageWidth=34;imageHeight=34;imageAlign=left;imageVerticalAlign=middle;';cells.push('<mxCell id="'+n.id+'" value="'+esc(n.name)+'" style="'+style+'" vertex="1" parent="1"><mxGeometry x="'+q.x+'" y="'+q.y+'" width="160" height="82" as="geometry"/></mxCell>')});
+ model.edges.forEach((e,i)=>cells.push('<mxCell id="e'+i+'" value="'+esc(e.label||'')+'" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#52657f;" edge="1" parent="1" source="'+e.from+'" target="'+e.to+'"><mxGeometry relative="1" as="geometry"/></mxCell>'));
+ return '<mxfile host="app.diagrams.net" modified="'+new Date().toISOString()+'" agent="Architecture Studio" version="24.7.17"><diagram id="architecture" name="Architecture"><mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0"><root>'+cells.join('')+'</root></mxGraphModel></diagram></mxfile>';
+}
+function downloadDrawio(){if(!model.nodes.length)return;save(drawioText(),'architecture-v'+model.version+'.drawio','application/xml')}
 function downloadSVG(){if(!model.nodes.length)return;save(svgText(),'architecture-v'+model.version+'.svg','image/svg+xml')}
 function downloadJSON(){save(JSON.stringify(model,null,2),'architecture-model-v'+model.version+'.json','application/json')}
 function fit(){document.querySelector('.canvasWrap').scrollTo({left:0,top:0,behavior:'smooth'})}

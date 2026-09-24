@@ -81,7 +81,7 @@ function parse(text){
  return {nodes,edges,version:model.version+1};
 }
 function snapshot(note){model.version++; versions.push({note,model:JSON.parse(JSON.stringify(model)),time:new Date().toLocaleTimeString()});render()}
-function generate(){model=parse(document.getElementById('req').value);model.version=0;versions=[];snapshot('Generated from requirements');setTimeout(()=>{renderReview();render()},0)}
+function generate(){model=parse(document.getElementById('req').value);model.version=0;versions=[];snapshot('Generated from requirements')}
 function applyRefinement(){
  let txt=document.getElementById('refine').value.trim();if(!txt)return;
  let low=txt.toLowerCase(),changed=false;
@@ -116,6 +116,25 @@ function layout(){
  });
  return pos
 }
+function architectureReview(){
+ const has=t=>model.nodes.some(n=>n.type===t), azure=model.nodes.some(n=>n.provider==='Azure'), findings=[], req=(document.getElementById('req')?.value||'').toLowerCase();
+ const add=(pillar,severity,title,detail,action='')=>findings.push({pillar,severity,title,detail,action});
+ if(!azure){add('Review','good','Azure CAF/WAF review not applicable','No Azure services were detected in this diagram.');return findings}
+ if(!has('monitor')&&!has('loganalytics')&&!has('insights'))add('WAF · Operational Excellence','high','Observability is missing','Add centralized monitoring, logs and application telemetry.','Add Azure Monitor and Log Analytics');
+ else add('WAF · Operational Excellence','good','Observability detected','Monitoring or telemetry services are represented.');
+ if(!has('keyvault'))add('WAF · Security','med','Secrets management not shown','Consider Key Vault and managed identities for secrets.','Add Key Vault');
+ if((has('sql')||has('storage')||has('keyvault'))&&!has('privateendpoint'))add('WAF · Security','high','Private access not shown','Review Private Endpoints and public network access for data services.','Add Private Endpoint');
+ if(has('vm')&&!/availability zone|zone redundant|multi.?zone/.test(req))add('WAF · Reliability','med','Failure-domain strategy unclear','Define availability-zone or other compute redundancy requirements.');
+ add('WAF · Cost Optimization','med','Cost requirements need workload context','Confirm budgets, utilization, scaling and non-production shutdown policies.');
+ add('WAF · Performance Efficiency','med','Capacity requirements need workload context','Define demand, latency targets, peaks and scaling requirements.');
+ if(!has('vnet')&&(has('firewall')||has('vpn')||has('privateendpoint')||has('vm')))add('CAF · Network topology','high','Network boundary incomplete','Show workload/platform VNets and subnet boundaries.','Add Virtual Network');
+ if(!has('firewall')&&/internet|public|external/.test(req))add('CAF · Security / Network','med','Central network control not shown','Review inspected ingress/egress controls.','Add Azure Firewall');
+ if(!/entra|managed identity|rbac|identity/.test(req))add('CAF · Identity','med','Identity model not documented','Define Entra ID, RBAC, managed identities and privileged access.');
+ if(!/policy|management group|subscription|landing zone|tag/.test(req))add('CAF · Governance','med','Governance scope not documented','Define subscriptions/management groups, Azure Policy, naming and tagging.');
+ return findings
+}
+function applyReviewAction(i){let f=architectureReview()[i];if(!f?.action)return;document.getElementById('refine').value=f.action;applyRefinement()}
+function renderReview(){let el=document.getElementById('review');if(!el)return;let fs=architectureReview();el.innerHTML=fs.map((f,i)=>'<div class="card"><div class="reviewHead"><b>'+escapeHtml(f.pillar)+'</b><span class="sev '+(f.severity==='high'?'high':f.severity==='good'?'good':'med')+'">'+(f.severity==='high'?'High':f.severity==='good'?'OK':'Review')+'</span></div><p><strong>'+escapeHtml(f.title)+'</strong><br>'+escapeHtml(f.detail)+'</p>'+(f.action?'<button class="reviewBtn" onclick="applyReviewAction('+i+')">Apply recommendation</button>':'')+'</div>').join('')}
 function render(){
  let d=document.getElementById('diagram');let p=layout();d.innerHTML='';
  [...new Set(model.nodes.map(n=>n.group))].forEach(g=>{let q=p['g:'+g],el=document.createElement('div');el.className='group '+(g.includes('Hub')?'hub':'');Object.assign(el.style,{left:q.x+'px',top:q.y+'px',width:q.w+'px',height:q.h+'px'});el.innerHTML='<div class="groupTitle">'+g+'</div>';d.appendChild(el)});

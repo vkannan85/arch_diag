@@ -49,7 +49,7 @@ const defs=[
  ['loganalytics','Log Analytics',['log analytics','log analytics workspace'],AZ+'analytics/log-analytics-workspaces.png','Azure'],
  ['bastion','Azure Bastion',['bastion'],AZ+'network/public-ip-addresses.png','Azure'],
  ['vpn','VPN Gateway',['vpn gateway'],AZ+'network/virtual-network-gateways.png','Azure'],
- ['loadbalancer','Load Balancer',['load balancer'],AZ+'network/load-balancers.png','Azure'],
+ ['loadbalancer','Load Balancer',['load balancer','load balancers','azure load balancer','lb'],AZ+'network/load-balancers.png','Azure'],
  ['vnet','Virtual Network',['virtual network','vnet'],AZ+'network/virtual-networks.png','Azure'],
  ['privateendpoint','Private Endpoint',['private endpoint'],AZ+'network/private-endpoint.png','Azure'],
  ['ec2','Amazon EC2',['amazon ec2',' ec2'],AWS+'compute/ec2.png','AWS'],
@@ -82,6 +82,11 @@ function parse(text){
  const placementLines=text.split(/\n|;/).map(x=>x.trim()).filter(Boolean);
  placementLines.forEach(line=>{
    let l=line.toLowerCase(),mentionsVm=/\b(vm|vms|virtual machine|virtual machines|session host|session hosts)\b/.test(l);
+   if(/\b(load balancer|load balancers|azure load balancer|lb)\b/.test(l)){
+     let lbs=nodes.filter(n=>n.type==='loadbalancer');
+     if(/\bhub\b|behind\s+(?:the\s+)?firewall/.test(l))lbs.forEach(n=>n.group='Hub / Connectivity');
+     else if(/\b(application|app|spoke)\b/.test(l))lbs.forEach(n=>n.group='Application');
+   }
    if(!mentionsVm)return;
    if(/\b(in|inside|within|place|deploy|move).*\bhub\b|\bhub\b.*\b(vm|vms|virtual machine|virtual machines)\b/.test(l)||/behind\s+(?:the\s+)?firewall/.test(l))
      nodes.filter(n=>n.type==='vm').forEach(n=>n.group='Hub / Connectivity');
@@ -99,7 +104,12 @@ function parse(text){
  add(get('vpn'),get('firewall'));add(get('bastion'),get('vm'));
  // If requirements put VMs behind/controlled by the firewall, connect the firewall to every VM.
  if(/(?:behind|controlled by|access(?:\s+to)?).*firewall|firewall.*(?:controls?|protects?).*(?:vm|virtual machine)/i.test(text)){
-   let fw=get('firewall');nodes.filter(n=>n.type==='vm').forEach(vm=>add(fw,vm));
+   let fw=get('firewall'),lb=get('loadbalancer'),vms=nodes.filter(n=>n.type==='vm');
+   if(lb){add(fw,lb);vms.forEach(vm=>add(lb,vm))}else vms.forEach(vm=>add(fw,vm));
+ }
+ // Explicit load-balancer intent distributes traffic to every VM, even with repeated VM instances.
+ if(get('loadbalancer')&&nodes.some(n=>n.type==='vm')){
+   let lb=get('loadbalancer');nodes.filter(n=>n.type==='vm').forEach(vm=>add(lb,vm));
  }
  add(get('vm'),get('storage'));add(get('vm'),get('keyvault'));add(get('vm'),get('monitor'));add(get('vm'),get('loganalytics'));add(get('storage'),get('privateendpoint'));add(get('keyvault'),get('privateendpoint'));
  // Natural-language connection commands are cumulative too.

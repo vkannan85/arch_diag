@@ -92,7 +92,13 @@ function applyRefinement(){
  // Explicit connection refinement: "connect A to B" or "A -> B".
  let cm=txt.match(/connect\s+(.+?)\s+to\s+(.+)/i)||txt.match(/^\s*(.+?)\s*->\s*(.+?)\s*$/i);
  if(cm){let da=findType(cm[1]),db=findType(cm[2]),na=da&&model.nodes.find(n=>n.type===da[0]),nb=db&&model.nodes.find(n=>n.type===db[0]);if(na&&nb&&!model.edges.some(e=>e.from===na.id&&e.to===nb.id)){model.edges.push({from:na.id,to:nb.id,label:''});changed=true}}
- rebuildEdges(true);snapshot(txt+(changed?'':' (connections/layout refreshed)'));document.getElementById('refine').value='';
+ rebuildEdges(true);
+ // Persist the refinement into the working requirements so future refinements build on it.
+ const reqEl=document.getElementById('req');
+ reqEl.value=(reqEl.value.trim()+'\n'+txt).trim();
+ snapshot(txt+(changed?'':' (connections/layout refreshed)'));
+ render();
+ document.getElementById('refine').value='';
 }
 function rebuildEdges(preserve=false){let existing=preserve?model.edges.slice():[];let fresh=parse(document.getElementById('req').value+'\n'+document.getElementById('refine').value);let byType=new Map(model.nodes.map(n=>[n.type,n]));model.edges=fresh.edges.map(e=>{let a=fresh.nodes.find(n=>n.id===e.from),b=fresh.nodes.find(n=>n.id===e.to),aa=a&&byType.get(a.type),bb=b&&byType.get(b.type);return aa&&bb?{from:aa.id,to:bb.id,label:e.label||''}:null}).filter(Boolean);existing.forEach(e=>{if(model.nodes.some(n=>n.id===e.from)&&model.nodes.some(n=>n.id===e.to)&&!model.edges.some(x=>x.from===e.from&&x.to===e.to))model.edges.push(e)});if(model.nodes.length>1&&!model.edges.length)for(let i=0;i<model.nodes.length-1;i++)model.edges.push({from:model.nodes[i].id,to:model.nodes[i+1].id,label:''})}
 function layout(){

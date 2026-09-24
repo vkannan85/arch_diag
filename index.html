@@ -92,8 +92,15 @@ function applyRefinement(){
 }
 function rebuildEdges(){let fresh=parse(document.getElementById('req').value+'\n'+document.getElementById('refine').value);let byType=new Map(model.nodes.map(n=>[n.type,n]));model.edges=fresh.edges.map(e=>{let a=fresh.nodes.find(n=>n.id===e.from),b=fresh.nodes.find(n=>n.id===e.to),aa=a&&byType.get(a.type),bb=b&&byType.get(b.type);return aa&&bb?{from:aa.id,to:bb.id,label:e.label||''}:null}).filter(Boolean);if(model.nodes.length>1&&!model.edges.length)for(let i=0;i<model.nodes.length-1;i++)model.edges.push({from:model.nodes[i].id,to:model.nodes[i+1].id,label:''})}
 function layout(){
- let groups=[...new Set(model.nodes.map(n=>n.group))],pos={},gx=25;
- groups.forEach((g,gi)=>{let ns=model.nodes.filter(n=>n.group===g),w=Math.max(390,Math.ceil(ns.length/2)*190+35),h=gi===1?330:250;let y=gi===1?80:gi===0?80:430;if(gi===2){gx=25;w=Math.max(700,Math.ceil(ns.length/3)*175+35)};pos['g:'+g]={x:gx,y,w,h};ns.forEach((n,i)=>{let cols=gi===2?3:2;pos[n.id]={x:gx+25+(i%cols)*185,y:y+70+Math.floor(i/cols)*105}});gx+=w+45});return pos
+ const groups=[...new Set(model.nodes.map(n=>n.group))],pos={},margin=25,gap=55,nodeW=160,nodeH=82,colGap=25,rowGap=28,head=70,pad=25;
+ const configs={'Application':{x:25,y:80,cols:2},'Hub / Connectivity':{x:600,y:80,cols:2},'Data / Security':{x:25,y:470,cols:3}};
+ let fallbackX=25,fallbackY=860;
+ groups.forEach(g=>{let ns=model.nodes.filter(n=>n.group===g),cfg=configs[g]||{x:fallbackX,y:fallbackY,cols:3},cols=Math.min(cfg.cols,Math.max(1,ns.length)),rows=Math.ceil(ns.length/cols);
+   let w=pad*2+cols*nodeW+(cols-1)*colGap,h=head+rows*nodeH+(rows-1)*rowGap+pad;
+   pos['g:'+g]={x:cfg.x,y:cfg.y,w,h};
+   ns.forEach((n,i)=>{let col=i%cols,row=Math.floor(i/cols);pos[n.id]={x:cfg.x+pad+col*(nodeW+colGap),y:cfg.y+head+row*(nodeH+rowGap)}});
+   if(!configs[g])fallbackY+=h+gap;
+ });return pos
 }
 function render(){
  let d=document.getElementById('diagram');let p=layout();d.innerHTML='';
